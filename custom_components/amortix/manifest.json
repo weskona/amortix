@@ -3,10 +3,10 @@
   "name": "Amortix",
   "version": "1.0.0",
   "config_flow": true,
-  "documentation": "https://github.com/USERNAME/amortix",
-  "issue_tracker": "https://github.com/USERNAME/amortix/issues",
+  "documentation": "https://github.com/weskona/amortix",
+  "issue_tracker": "https://github.com/weskona/amortix/issues",
   "integration_type": "device",
   "iot_class": "calculated",
   "requirements": [],
-  "codeowners": ["@USERNAME"]
+  "codeowners": ["@weskona"]
 }

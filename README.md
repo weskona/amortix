@@ -2,7 +2,7 @@
 
 [English] · [Deutsch](README.de.md)
 
-[![Validate](https://github.com/USERNAME/amortix/actions/workflows/validate.yml/badge.svg)](https://github.com/USERNAME/amortix/actions/workflows/validate.yml)
+[![Validate](https://github.com/weskona/amortix/actions/workflows/validate.yml/badge.svg)](https://github.com/weskona/amortix/actions/workflows/validate.yml)
 [![hacs](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
 
 A **device-agnostic amortization integration** for Home Assistant. From cumulative kWh
