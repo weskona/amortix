@@ -1,60 +1,62 @@
 # Amortix
 
+[English] · [Deutsch](README.de.md)
+
 [![Validate](https://github.com/USERNAME/amortix/actions/workflows/validate.yml/badge.svg)](https://github.com/USERNAME/amortix/actions/workflows/validate.yml)
 [![hacs](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
 
-Eine **geräteunabhängige Amortisations-Integration** für Home Assistant. Sie berechnet aus
-kumulierenden kWh-Sensoren und ein paar Preisen, wann sich eine Energie-Investition bezahlt
-macht – für Balkonkraftwerke, PV-Anlagen und Batteriespeicher.
+A **device-agnostic amortization integration** for Home Assistant. From cumulative kWh
+sensors and a few prices it works out when an energy investment pays for itself – for
+balcony solar plants, PV systems and battery storage.
 
-> Kern: zwei kWh-Sensoren + Preise (als `input_number` oder Sensor) genügen. Die Berechnung
-> ist gemessen, sprungfrei (60-s-Takt, inkrementelle Bewertung) und dynamiktauglich (Tibber).
+> Core idea: two kWh sensors + prices (as `input_number` or sensor) are enough. The
+> calculation is measured, jump-free (60 s cycle, incremental valuation) and works with
+> dynamic tariffs (e.g. Tibber).
 
-## Anwendungsfälle
+## Use cases
 
-| Modus | Pflicht-Sensoren | Rechnung |
-|-------|------------------|----------|
-| **Direktverbrauch** (BKW/PV ohne Speicher) | Erzeugung, Einspeisung (to_grid) | `Eigenverbrauch × Strompreis + Einspeisung × Vergütung` |
-| **Speicher** | Ladung, Entladung | `Entladung × Strompreis − Ladung × Vergütung` |
+| Mode | Required sensors | Calculation |
+|------|------------------|-------------|
+| **Direct use** (balcony/PV without storage) | production, export (to_grid) | `self-consumption × grid price + export × feed-in tariff` |
+| **Storage** | charge, discharge | `discharge × grid price − charge × feed-in tariff` |
 
-- **Mehrere Erzeuger** (z. B. BKW + große PV am selben Zähler) lassen sich im Direktverbrauch
-  gemeinsam auswählen und werden summiert.
-- Speicher funktioniert für **AC- und DC-Kopplung** (nur Lade-/Entlademenge zählt).
-- **Roundtrip-Wirkungsgrad** wird berechnet oder ein vorhandener Sensor genutzt (rein informativ).
+- **Multiple producers** (e.g. balcony + large PV on the same meter) can be selected
+  together in direct mode and are summed.
+- Storage works for **AC- and DC-coupled** systems (only charge/discharge energy matters).
+- **Roundtrip efficiency** is computed, or an existing sensor is used (informational only).
 
 ## Installation
 
-### HACS (empfohlen)
-1. HACS → drei Punkte → **Benutzerdefinierte Repositories**.
-2. URL dieses Repos eintragen, Kategorie **Integration**.
-3. „Amortix" installieren, Home Assistant neu starten.
+### HACS (recommended)
+1. HACS → three dots → **Custom repositories**.
+2. Add this repo's URL, category **Integration**.
+3. Install "Amortix", restart Home Assistant.
 
-### Manuell
-1. Ordner `custom_components/amortix/` ins Home-Assistant-Konfigverzeichnis kopieren.
-2. Home Assistant neu starten.
+### Manual
+1. Copy the `custom_components/amortix/` folder into your Home Assistant config directory.
+2. Restart Home Assistant.
 
-## Einrichtung
-**Einstellungen → Geräte & Dienste → Integration hinzufügen → „Amortix"**, dann den
-Anwendungsfall wählen. Jeder Dialog enthält Hinweise zu den benötigten Sensoren und zur
-korrekten Einrichtung.
+## Setup
+**Settings → Devices & Services → Add Integration → "Amortix"**, then choose the use case.
+Each dialog includes hints about the required sensors and correct setup.
 
-Voraussetzungen:
-- **Kumulierende kWh-Zähler** (`state_class: total`/`total_increasing`), keine Watt-Sensoren.
-- Einspeisung als **saldierter** Wert am Netzübergabepunkt.
-- `input_number`-Helfer für Anschaffungskosten, Strompreis und (optional) Einspeisevergütung.
+Requirements:
+- **Cumulative kWh meters** (`state_class: total`/`total_increasing`), not watt sensors.
+- Export as the **netted** value at the grid connection point.
+- `input_number` helpers for purchase cost, grid price and (optional) feed-in tariff.
 
-## Erzeugte Sensoren
-**Direktverbrauch:** Einsparung gesamt (€), Einsparung Netzbezug (€), Einsparung Einspeisung
-(€), Eigenverbrauch (kWh), Amortisations-Fortschritt (%), verbleibend (€), Ersparnis/Tag (€),
-Restzeit (d), Amortisations-Datum.
+## Created sensors
+**Direct use:** total savings (€), grid-purchase savings (€), feed-in savings (€),
+self-consumption (kWh), amortization progress (%), remaining (€), savings/day (€),
+remaining time (d), payback date.
 
-**Speicher:** Speicher-Ersparnis (€), Entladung (kWh), Ladung (kWh), Roundtrip-η (%) plus die
-gemeinsamen Amortisations-Kennzahlen.
+**Storage:** storage savings (€), discharge (kWh), charge (kWh), roundtrip η (%) plus the
+shared amortization metrics.
 
 ## Icon
-Die Icons liegen unter `icons/`. Für die Anzeige in Home Assistant müssen sie ins
-[home-assistant/brands](https://github.com/home-assistant/brands)-Repo unter
-`custom_integrations/amortix/icon.png` (256×256) und `icon@2x.png` (512×512).
+Icons live under `icons/`. To show them in Home Assistant they must go into the
+[home-assistant/brands](https://github.com/home-assistant/brands) repo under
+`custom_integrations/amortix/icon.png` (256×256) and `icon@2x.png` (512×512).
 
-## Lizenz
-MIT – siehe [LICENSE](LICENSE).
+## License
+MIT – see [LICENSE](LICENSE).
