@@ -1,0 +1,100 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Was möchtest du amortisieren?",
+        "menu_options": {
+          "direct": "Direktverbrauch (BKW/PV ohne Speicher)",
+          "storage": "Speicher (Lade-/Entladebilanz)"
+        }
+      },
+      "direct": {
+        "title": "Direktverbrauch einrichten",
+        "description": "Berechnet die Ersparnis aus dem gemessenen Eigenverbrauch (Erzeugung − Einspeisung).\n\n**Benötigt:**\n- **kWh-Erzeugung** vom Wechselrichter (ein oder mehrere Sensoren)\n- **kWh-Einspeisung** am Netzübergabepunkt (saldiert)\n- **input_number**-Helfer für Anschaffungskosten und Strompreis\n\n**Wichtig für korrekte Werte:**\n- Nur **kumulierende kWh**-Zähler verwenden (state_class total / total_increasing), keine Watt-Sensoren. Hast du nur Watt, vorher per Riemann-Integral-Helfer einen kWh-Sensor bauen.\n- Die Einspeisung muss der **saldierte** Wert am Netzanschlusspunkt sein (nicht am Gerät, nicht je Phase).\n- Mehrere Erzeuger (z. B. BKW + große PV am selben Zähler) einfach gemeinsam auswählen – sie werden summiert.\n- Die Zählung startet bei null. Für eine bereits laufende Anlage unten eine einmalige Startgutschrift angeben.",
+        "data": {
+          "name": "Name",
+          "production_sensor": "PV-Erzeugung (ein oder mehrere kWh-Sensoren)",
+          "to_grid_sensor": "Einspeisung / to_grid",
+          "investment_entity": "Anschaffungskosten",
+          "price_entity": "Strompreis Netzbezug",
+          "feed_in_entity": "Einspeisevergütung (optional)",
+          "initial_auto": "Startgutschrift automatisch aus aktuellen Zählerständen berechnen",
+          "initial_self_kwh": "Startgutschrift: bisher selbst verbrauchte kWh",
+          "initial_export_kwh": "Startgutschrift: bisher eingespeiste kWh",
+          "initial_price": "Startgutschrift: Ø-Strompreis (optional)",
+          "initial_feed_in": "Startgutschrift: Ø-Einspeisevergütung (optional)",
+          "initial_savings": "Startgutschrift: pauschaler Euro-Betrag"
+        },
+        "data_description": {
+          "name": "Frei wählbar (z. B. 'Balkonkraftwerk'). Bestimmt die Namen der erzeugten Sensoren.",
+          "production_sensor": "Kumulierende kWh-Zähler der Erzeugung. Mehrere wählbar (BKW + PV) – sie werden summiert. Keine Watt-Sensoren.",
+          "to_grid_sensor": "Kumulierende kWh-Einspeisung am Netzübergabepunkt (saldiert). Beim Smart Meter das Einspeise-Register, kein Saldo-/Watt-Wert.",
+          "investment_entity": "input_number/Sensor mit den Anschaffungskosten in €.",
+          "price_entity": "input_number/Sensor mit dem Netzbezugspreis in €/kWh (z. B. auch ein Tibber-Sensor).",
+          "feed_in_entity": "input_number/Sensor mit der Vergütung in €/kWh. Leer = 0 (Standard beim Balkonkraftwerk).",
+          "initial_auto": "Eigenverbrauch = aktuelle Erzeugung − aktuelle Einspeisung; bewertet mit den aktuellen input_number-Preisen. NUR verwenden, wenn alle Sensoren dieselbe Historie haben (kein frisch erstellter Helfer).",
+          "initial_self_kwh": "Manueller Modus (Auto aus): bisher selbst verbrauchte kWh. Wird mit dem Ø-Strompreis multipliziert.",
+          "initial_export_kwh": "Manueller Modus: bisher eingespeiste kWh. Wird mit der Ø-Einspeisevergütung multipliziert.",
+          "initial_price": "Optional. Leer/0 = aktueller Preis aus der Strompreis-input_number.",
+          "initial_feed_in": "Optional. Leer/0 = aktuelle Vergütung aus der input_number (bzw. 0).",
+          "initial_savings": "Optional. Wird zusätzlich zur berechneten Startgutschrift addiert."
+        }
+      },
+      "storage": {
+        "title": "Speicher einrichten",
+        "description": "Eigene Amortisation des Speichers, getrennt von den Panels.\nErsparnis = Entladung × Strompreis − Ladung × Einspeisevergütung (entgangene Einspeisung; Abzug nur falls Vergütung > 0). Verluste stecken implizit in der Entladung.\n\n**Benötigt:**\n- **kWh-Ladung** und **kWh-Entladung** der Batterie (Speicher-/Hybridwechselrichter)\n- **input_number** für die Speicher-Anschaffungskosten (getrennt von den Panels)\n\n**Wichtig für korrekte Werte:**\n- Nur **kumulierende kWh**-Zähler, keine Watt-Sensoren.\n- Funktioniert für AC- und DC-gekoppelte Speicher gleichermaßen – es zählen nur Lade-/Entlademenge.\n- Annahme: der Speicher lädt aus PV-Überschuss. Netzladung (Tarif-Arbitrage) ist hier nicht abgebildet.\n- Der Roundtrip-Wirkungsgrad ist rein informativ und geht NICHT in die €-Berechnung ein.",
+        "data": {
+          "name": "Name",
+          "charge_sensor": "Ladung (kWh, kumulierend)",
+          "discharge_sensor": "Entladung (kWh, kumulierend)",
+          "roundtrip_entity": "Roundtrip-Wirkungsgrad-Sensor (optional)",
+          "investment_entity": "Anschaffungskosten Speicher",
+          "price_entity": "Strompreis Netzbezug",
+          "feed_in_entity": "Einspeisevergütung (optional)",
+          "initial_auto": "Startgutschrift automatisch aus aktuellen Zählerständen berechnen",
+          "initial_discharge_kwh": "Startgutschrift: bisher entladene kWh",
+          "initial_charge_kwh": "Startgutschrift: bisher geladene kWh",
+          "initial_price": "Startgutschrift: Ø-Strompreis (optional)",
+          "initial_feed_in": "Startgutschrift: Ø-Einspeisevergütung (optional)",
+          "initial_savings": "Startgutschrift: pauschaler Euro-Betrag"
+        },
+        "data_description": {
+          "name": "Frei wählbar (z. B. 'Speicher'). Bestimmt die Namen der erzeugten Sensoren.",
+          "charge_sensor": "Kumulierender kWh-Zähler der Batterie-Ladung (oft 'battery charge energy'). Kein Watt-Sensor.",
+          "discharge_sensor": "Kumulierender kWh-Zähler der Batterie-Entladung (oft 'battery discharge energy'). Kein Watt-Sensor.",
+          "roundtrip_entity": "Liefert dein Speicher den Wirkungsgrad schon? Dann hier auswählen. Leer = die Integration berechnet η = Entladung/Ladung (braucht mehrere volle Zyklen, bis er realistisch ist).",
+          "investment_entity": "input_number/Sensor mit den Speicher-Kosten in €, getrennt von den Panels.",
+          "price_entity": "input_number/Sensor mit dem Netzbezugspreis in €/kWh.",
+          "feed_in_entity": "input_number/Sensor mit der Vergütung in €/kWh. Leer = 0 (dann kein Abzug für entgangene Einspeisung).",
+          "initial_auto": "Nimmt Entladung/Ladung aus den aktuellen Zählerständen; bewertet mit den input_number-Preisen. NUR wenn die Zähler echte, zusammengehörige Historie haben.",
+          "initial_discharge_kwh": "Manueller Modus: bisher entladene kWh × Ø-Strompreis.",
+          "initial_charge_kwh": "Manueller Modus: bisher geladene kWh × Ø-Einspeisevergütung (Abzug).",
+          "initial_price": "Optional. Leer/0 = aktueller Preis aus der Strompreis-input_number.",
+          "initial_feed_in": "Optional. Leer/0 = aktuelle Vergütung aus der input_number (bzw. 0).",
+          "initial_savings": "Optional. Wird zusätzlich zur berechneten Startgutschrift addiert."
+        }
+      }
+    },
+    "error": {
+      "same_sensor": "Die Sensoren müssen unterschiedlich sein (Einspeisung darf nicht zu den Erzeugungssensoren gehören)."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Amortisation anpassen",
+        "description": "Sensoren und Startgutschrift bleiben unverändert; hier nur die laufenden Werte (Kosten, Preis, Vergütung).",
+        "data": {
+          "investment_entity": "Anschaffungskosten",
+          "price_entity": "Strompreis Netzbezug",
+          "feed_in_entity": "Einspeisevergütung (optional)"
+        },
+        "data_description": {
+          "investment_entity": "input_number/Sensor mit den Anschaffungskosten in €.",
+          "price_entity": "input_number/Sensor mit dem Netzbezugspreis in €/kWh.",
+          "feed_in_entity": "input_number/Sensor mit der Vergütung in €/kWh. Leer = 0."
+        }
+      }
+    }
+  }
+}

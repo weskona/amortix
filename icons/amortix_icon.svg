@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F5B023"/>
+      <stop offset="1" stop-color="#1C965A"/>
+    </linearGradient>
+  </defs>
+  <rect x="11.5" y="11.5" width="233" height="233" rx="60" fill="url(#g)"/>
+  <!-- Break-even-Linie -->
+  <line x1="51" y1="159" x2="205" y2="159" stroke="#ffffff" stroke-opacity="0.55"
+        stroke-width="3" stroke-dasharray="11 11" stroke-linecap="round"/>
+  <!-- Payback-Kurve -->
+  <path d="M51 188 C 96 184, 150 150, 205 56" fill="none" stroke="#ffffff"
+        stroke-width="7.7" stroke-linecap="round"/>
+  <!-- Pfeilspitze -->
+  <path d="M205 56 l -20 6 M205 56 l -3 21" fill="none" stroke="#ffffff"
+        stroke-width="7.7" stroke-linecap="round"/>
+  <!-- Euro-Symbol -->
+  <text x="60" y="150" font-family="DejaVu Sans, Arial, sans-serif" font-weight="bold"
+        font-size="102" fill="#ffffff">€</text>
+</svg>

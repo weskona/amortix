@@ -1,0 +1,100 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "What do you want to amortize?",
+        "menu_options": {
+          "direct": "Direct use (balcony/PV without storage)",
+          "storage": "Storage (charge/discharge balance)"
+        }
+      },
+      "direct": {
+        "title": "Set up direct use",
+        "description": "Calculates the savings from measured self-consumption (production − export).\n\n**Required:**\n- **kWh production** from the inverter (one or more sensors)\n- **kWh export** at the grid connection point (netted)\n- **input_number** helpers for purchase cost and electricity price\n\n**Important for correct values:**\n- Use only **cumulative kWh** meters (state_class total / total_increasing), not watt sensors. If you only have watts, build a kWh sensor first via a Riemann integral helper.\n- Export must be the **netted** value at the grid connection point (not at the device, not per phase).\n- Multiple producers (e.g. balcony + large PV on the same meter) can be selected together – they are summed.\n- Counting starts at zero. For an already running system, add a one-time starting credit below.",
+        "data": {
+          "name": "Name",
+          "production_sensor": "PV production (one or more kWh sensors)",
+          "to_grid_sensor": "Export / to_grid",
+          "investment_entity": "Purchase cost",
+          "price_entity": "Grid electricity price",
+          "feed_in_entity": "Feed-in tariff (optional)",
+          "initial_auto": "Calculate starting credit automatically from current meter readings",
+          "initial_self_kwh": "Starting credit: previously self-consumed kWh",
+          "initial_export_kwh": "Starting credit: previously exported kWh",
+          "initial_price": "Starting credit: average grid price (optional)",
+          "initial_feed_in": "Starting credit: average feed-in tariff (optional)",
+          "initial_savings": "Starting credit: flat euro amount"
+        },
+        "data_description": {
+          "name": "Free to choose (e.g. 'Balcony plant'). Determines the names of the created sensors.",
+          "production_sensor": "Cumulative kWh production meters. Multiple allowed (balcony + PV) – they are summed. Not watt sensors.",
+          "to_grid_sensor": "Cumulative kWh export at the grid connection point (netted). On a smart meter, the export register, not a net/watt value.",
+          "investment_entity": "input_number/sensor with the purchase cost in €.",
+          "price_entity": "input_number/sensor with the grid price in €/kWh (e.g. a Tibber sensor).",
+          "feed_in_entity": "input_number/sensor with the tariff in €/kWh. Empty = 0 (default for balcony plants).",
+          "initial_auto": "Self-consumption = current production − current export; valued with the current input_number prices. Only if all sensors share the same history (not a fresh helper).",
+          "initial_self_kwh": "Manual mode (auto off): previously self-consumed kWh. Multiplied by the average grid price.",
+          "initial_export_kwh": "Manual mode: previously exported kWh. Multiplied by the average feed-in tariff.",
+          "initial_price": "Optional. Empty/0 = current price from the price input_number.",
+          "initial_feed_in": "Optional. Empty/0 = current tariff from the input_number (or 0).",
+          "initial_savings": "Optional. Added on top of the calculated starting credit."
+        }
+      },
+      "storage": {
+        "title": "Set up storage",
+        "description": "Separate amortization for the storage, independent of the panels.\nSavings = discharge × grid price − charge × feed-in tariff (forgone export; deducted only if tariff > 0). Losses are implicit in the discharge figure.\n\n**Required:**\n- **kWh charge** and **kWh discharge** of the battery (storage/hybrid inverter)\n- **input_number** for the storage purchase cost (separate from the panels)\n\n**Important for correct values:**\n- Use only **cumulative kWh** meters, not watt sensors.\n- Works equally for AC- and DC-coupled storage – only charge/discharge energy matters.\n- Assumption: the storage charges from PV surplus. Grid charging (arbitrage) is not modeled here.\n- The roundtrip efficiency is informational only and does NOT enter the € calculation.",
+        "data": {
+          "name": "Name",
+          "charge_sensor": "Charge (kWh, cumulative)",
+          "discharge_sensor": "Discharge (kWh, cumulative)",
+          "roundtrip_entity": "Roundtrip efficiency sensor (optional)",
+          "investment_entity": "Storage purchase cost",
+          "price_entity": "Grid electricity price",
+          "feed_in_entity": "Feed-in tariff (optional)",
+          "initial_auto": "Calculate starting credit automatically from current meter readings",
+          "initial_discharge_kwh": "Starting credit: previously discharged kWh",
+          "initial_charge_kwh": "Starting credit: previously charged kWh",
+          "initial_price": "Starting credit: average grid price (optional)",
+          "initial_feed_in": "Starting credit: average feed-in tariff (optional)",
+          "initial_savings": "Starting credit: flat euro amount"
+        },
+        "data_description": {
+          "name": "Free to choose (e.g. 'Storage'). Determines the names of the created sensors.",
+          "charge_sensor": "Cumulative kWh battery charge meter (often 'battery charge energy'). Not a watt sensor.",
+          "discharge_sensor": "Cumulative kWh battery discharge meter (often 'battery discharge energy'). Not a watt sensor.",
+          "roundtrip_entity": "Does your storage already provide efficiency? Select it here. Empty = the integration computes η = discharge/charge (needs several full cycles to settle).",
+          "investment_entity": "input_number/sensor with the storage cost in €, separate from the panels.",
+          "price_entity": "input_number/sensor with the grid price in €/kWh.",
+          "feed_in_entity": "input_number/sensor with the tariff in €/kWh. Empty = 0 (then no deduction for forgone export).",
+          "initial_auto": "Takes discharge/charge from current readings; valued with the input_number prices. Only if the meters share real, matching history.",
+          "initial_discharge_kwh": "Manual mode: previously discharged kWh × average grid price.",
+          "initial_charge_kwh": "Manual mode: previously charged kWh × average feed-in tariff (deduction).",
+          "initial_price": "Optional. Empty/0 = current price from the price input_number.",
+          "initial_feed_in": "Optional. Empty/0 = current tariff from the input_number (or 0).",
+          "initial_savings": "Optional. Added on top of the calculated starting credit."
+        }
+      }
+    },
+    "error": {
+      "same_sensor": "The sensors must be different (export must not be among the production sensors)."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Adjust amortization",
+        "description": "Sensors and starting credit stay unchanged; only the live values here (cost, price, tariff).",
+        "data": {
+          "investment_entity": "Purchase cost",
+          "price_entity": "Grid electricity price",
+          "feed_in_entity": "Feed-in tariff (optional)"
+        },
+        "data_description": {
+          "investment_entity": "input_number/sensor with the purchase cost in €.",
+          "price_entity": "input_number/sensor with the grid price in €/kWh.",
+          "feed_in_entity": "input_number/sensor with the tariff in €/kWh. Empty = 0."
+        }
+      }
+    }
+  }
+}
