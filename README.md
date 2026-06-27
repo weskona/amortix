@@ -4,14 +4,46 @@
 
 [![Validate](https://github.com/weskona/amortix/actions/workflows/validate.yml/badge.svg)](https://github.com/weskona/amortix/actions/workflows/validate.yml)
 [![hacs](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
+[![release](https://img.shields.io/github/v/release/weskona/amortix)](https://github.com/weskona/amortix/releases)
+[![license](https://img.shields.io/github/license/weskona/amortix)](LICENSE)
 
 A **device-agnostic amortization integration** for Home Assistant. From cumulative kWh
 sensors and a few prices it works out when an energy investment pays for itself – for
 balcony solar plants, PV systems and battery storage.
 
-> Core idea: two kWh sensors + prices (as `input_number` or sensor) are enough. The
-> calculation is measured, jump-free (60 s cycle, incremental valuation) and works with
-> dynamic tariffs (e.g. Tibber).
+> Two kWh sensors + prices (as `input_number` or sensor) are enough. The calculation is
+> measured, jump-free (60 s cycle, incremental valuation) and works with dynamic tariffs
+> (e.g. Tibber).
+
+## Installation
+
+### HACS
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=weskona&repository=amortix&category=integration)
+
+Click the button above to add Amortix to HACS, then **Download** and restart Home Assistant.
+
+<details>
+<summary>Manual HACS steps</summary>
+
+1. HACS → three dots (top right) → **Custom repositories**.
+2. URL `https://github.com/weskona/amortix`, category **Integration**.
+3. Add, then open **Amortix** and **Download**.
+4. Restart Home Assistant.
+</details>
+
+### Manual (without HACS)
+1. Copy `custom_components/amortix/` into your Home Assistant `config` directory.
+2. Restart Home Assistant.
+
+## Setup
+**Settings → Devices & Services → Add Integration → "Amortix"**, then choose the use case.
+Each dialog includes hints about the required sensors and correct setup.
+
+Requirements:
+- **Cumulative kWh meters** (`state_class: total`/`total_increasing`), not watt sensors.
+- Export as the **netted** value at the grid connection point.
+- `input_number` helpers for purchase cost, grid price and (optional) feed-in tariff.
 
 ## Use cases
 
@@ -24,26 +56,8 @@ balcony solar plants, PV systems and battery storage.
   together in direct mode and are summed.
 - Storage works for **AC- and DC-coupled** systems (only charge/discharge energy matters).
 - **Roundtrip efficiency** is computed, or an existing sensor is used (informational only).
-
-## Installation
-
-### HACS (recommended)
-1. HACS → three dots → **Custom repositories**.
-2. Add this repo's URL, category **Integration**.
-3. Install "Amortix", restart Home Assistant.
-
-### Manual
-1. Copy the `custom_components/amortix/` folder into your Home Assistant config directory.
-2. Restart Home Assistant.
-
-## Setup
-**Settings → Devices & Services → Add Integration → "Amortix"**, then choose the use case.
-Each dialog includes hints about the required sensors and correct setup.
-
-Requirements:
-- **Cumulative kWh meters** (`state_class: total`/`total_increasing`), not watt sensors.
-- Export as the **netted** value at the grid connection point.
-- `input_number` helpers for purchase cost, grid price and (optional) feed-in tariff.
+- **Starting credit** lets already-running systems begin with their accumulated savings
+  (manual or automatic from current meter readings).
 
 ## Created sensors
 **Direct use:** total savings (€), grid-purchase savings (€), feed-in savings (€),
@@ -52,11 +66,6 @@ remaining time (d), payback date.
 
 **Storage:** storage savings (€), discharge (kWh), charge (kWh), roundtrip η (%) plus the
 shared amortization metrics.
-
-## Icon
-Icons live under `icons/`. To show them in Home Assistant they must go into the
-[home-assistant/brands](https://github.com/home-assistant/brands) repo under
-`custom_integrations/amortix/icon.png` (256×256) and `icon@2x.png` (512×512).
 
 ## License
 MIT – see [LICENSE](LICENSE).
