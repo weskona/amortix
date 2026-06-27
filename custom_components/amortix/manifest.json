@@ -1,12 +1,14 @@
 {
   "domain": "amortix",
   "name": "Amortix",
-  "version": "1.0.0",
+  "codeowners": [
+    "@weskona"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/weskona/amortix",
-  "issue_tracker": "https://github.com/weskona/amortix/issues",
   "integration_type": "device",
   "iot_class": "calculated",
+  "issue_tracker": "https://github.com/weskona/amortix/issues",
   "requirements": [],
-  "codeowners": ["@weskona"]
+  "version": "1.0.0"
 }
