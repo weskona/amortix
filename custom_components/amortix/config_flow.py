@@ -152,6 +152,9 @@ class AmortizationConfigFlow(ConfigFlow, domain=DOMAIN):
         return AmortizationOptionsFlow()
 
 
+_ECONOMICS_KEYS = (CONF_INVESTMENT_ENTITY, CONF_PRICE_ENTITY, CONF_FEED_IN_ENTITY)
+
+
 class AmortizationOptionsFlow(OptionsFlow):
     """Live-Werte nachträglich anpassen (Sensoren & Startgutschrift bleiben fix)."""
 
@@ -159,7 +162,18 @@ class AmortizationOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            # Vollstaendig aufgeloest in entry.data schreiben statt in
+            # entry.options: {**data, **options} in BaseManager.config wuerde
+            # ein hier geleertes feed_in_entity sonst auf den alten, in
+            # entry.data verbliebenen Wert zurueckfallen lassen (nur die
+            # tatsaechlich uebermittelten Felder landen in user_input,
+            # geleerte fehlen einfach statt explizit None zu sein).
+            new_data = {**self.config_entry.data, **user_input}
+            for key in _ECONOMICS_KEYS:
+                if key not in user_input:
+                    new_data.pop(key, None)
+            self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
+            return self.async_create_entry(title="", data={})
         current = {**self.config_entry.data, **self.config_entry.options}
         schema = vol.Schema(_economics_schema(current))
         return self.async_show_form(step_id="init", data_schema=schema)

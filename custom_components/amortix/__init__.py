@@ -35,8 +35,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        manager = hass.data[DOMAIN].pop(entry.entry_id)
-        manager.async_stop()
+        manager = hass.data[DOMAIN].pop(entry.entry_id, None)
+        if manager is not None:
+            manager.async_stop()
     return unload_ok
 
 

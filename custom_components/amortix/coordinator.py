@@ -46,6 +46,15 @@ class MonotonicCounter:
     def __init__(self) -> None:
         self.raw_last: float | None = None
         self.total: float = 0.0
+        # Erster stark abgefallener Wert nach einem echten Reset UND ein
+        # einmaliger "0 statt unavailable"-Glitch (Cloud-Integrationen wie
+        # Alpha ESS melden das theoretisch so) sehen fuer sich genommen
+        # identisch aus. Ein Reset wird daher erst nach zwei aufeinander-
+        # folgenden niedrigen Werten bestaetigt -- erholt sich der Zaehler
+        # dazwischen wieder (Glitch), verwirft update() den Kandidaten und
+        # rechnet normal gegen den unveraenderten raw_last weiter, ohne die
+        # Energie doppelt zu zaehlen.
+        self._reset_candidate: float | None = None
 
     def restore(self, raw_last: float | None, total: float) -> None:
         self.raw_last = raw_last
@@ -56,10 +65,15 @@ class MonotonicCounter:
             self.raw_last = reading
             return
         if reading < self.raw_last:
-            if reading < self.raw_last * 0.1:  # echter Reset auf ~0
-                self.total += max(reading, 0.0)
-                self.raw_last = reading
+            if reading < self.raw_last * 0.1:  # moeglicher Reset auf ~0
+                if self._reset_candidate is not None:
+                    self.total += max(reading, 0.0)
+                    self.raw_last = reading
+                    self._reset_candidate = None
+                else:
+                    self._reset_candidate = reading
             return
+        self._reset_candidate = None
         self.total += reading - self.raw_last
         self.raw_last = reading
 
