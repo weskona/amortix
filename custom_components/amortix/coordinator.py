@@ -248,7 +248,14 @@ class BaseManager:
         inv = self.investment
         if not inv or inv <= 0:
             return None
-        return min(self.total_savings / inv * 100.0, 100.0)
+        # Bei Speicher-Betrieb kann total_savings vorübergehend unter
+        # initial_credit (sogar unter 0) fallen, wenn in einer Auswertung
+        # geladen, aber nicht entladen wird und die Einspeisevergütung > 0
+        # ist (entgangene Einspeisung wird abgezogen, siehe
+        # StorageManager._async_evaluate). Ohne Untergrenze würde die
+        # Fortschritts-% dann negativ, was für eine Amortisationsanzeige
+        # keinen Sinn ergibt.
+        return max(0.0, min(self.total_savings / inv * 100.0, 100.0))
 
     @property
     def remaining(self) -> float | None:
