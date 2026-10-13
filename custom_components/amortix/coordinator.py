@@ -40,21 +40,32 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
+# Ein Wert unter diesem Anteil des letzten Stands gilt als Reset-/Glitch-Kandidat;
+# kleinere Rücksprünge (Rundung, Korrekturen) werden ignoriert.
+RESET_DROP_RATIO = 0.5
+# So viele Updates nach einer Reset-Bestätigung wird ein Sprung zurück auf den
+# alten Stand noch als Glitch erkannt und die Buchung zurückgenommen.
+RESET_GUARD_UPDATES = 3
+
+
 class MonotonicCounter:
     """Macht aus einem (ggf. resettenden) kWh-Zähler einen monoton steigenden Gesamtwert."""
 
     def __init__(self) -> None:
         self.raw_last: float | None = None
         self.total: float = 0.0
-        # Erster stark abgefallener Wert nach einem echten Reset UND ein
-        # einmaliger "0 statt unavailable"-Glitch (Cloud-Integrationen wie
-        # Alpha ESS melden das theoretisch so) sehen fuer sich genommen
-        # identisch aus. Ein Reset wird daher erst nach zwei aufeinander-
-        # folgenden niedrigen Werten bestaetigt -- erholt sich der Zaehler
-        # dazwischen wieder (Glitch), verwirft update() den Kandidaten und
-        # rechnet normal gegen den unveraenderten raw_last weiter, ohne die
-        # Energie doppelt zu zaehlen.
+        # Ein echter Reset und ein "0 statt unavailable"-Glitch (Cloud-
+        # Integrationen wie Alpha ESS melden das theoretisch so) sehen beim
+        # ersten niedrigen Wert identisch aus. Ein Reset wird daher erst
+        # bestätigt, wenn ein zweiter niedriger Wert folgt, der nicht weiter
+        # fällt. Erholt sich der Zähler dazwischen (Glitch), wird der Kandidat
+        # verworfen, ohne Energie doppelt zu zählen.
         self._reset_candidate: float | None = None
+        # Hält der Glitch länger (z. B. zweimal "0" hintereinander) und wurde
+        # deshalb ein Reset bestätigt, merkt sich der Guard (alter Stand,
+        # gebuchte kWh, Rest-Updates). Springt der Zähler dann zurück auf den
+        # alten Stand, wird die irrtümliche Buchung zurückgenommen.
+        self._guard: tuple[float, float, int] | None = None
 
     def restore(self, raw_last: float | None, total: float) -> None:
         self.raw_last = raw_last
@@ -64,14 +75,33 @@ class MonotonicCounter:
         if self.raw_last is None:
             self.raw_last = reading
             return
+
+        if self._guard is not None:
+            old_raw, added, ttl = self._guard
+            if reading >= old_raw:
+                # Der "Reset" war ein Glitch: alles seit der Bestätigung
+                # Gebuchte (= raw_last) zurücknehmen, ab dem alten Stand weiterzählen.
+                self.total += (reading - old_raw) - self.raw_last
+                self.raw_last = reading
+                self._guard = None
+                self._reset_candidate = None
+                return
+            self._guard = (old_raw, added, ttl - 1) if ttl > 1 else None
+
         if reading < self.raw_last:
-            if reading < self.raw_last * 0.1:  # moeglicher Reset auf ~0
-                if self._reset_candidate is not None:
+            if reading < self.raw_last * RESET_DROP_RATIO:  # möglicher Reset
+                candidate = self._reset_candidate
+                if candidate is None or reading < candidate:
+                    self._reset_candidate = reading
+                else:
+                    # zweiter niedriger Wert, der nicht weiter fällt: Reset
                     self.total += max(reading, 0.0)
+                    self._guard = (self.raw_last, max(reading, 0.0), RESET_GUARD_UPDATES)
                     self.raw_last = reading
                     self._reset_candidate = None
-                else:
-                    self._reset_candidate = reading
+            else:
+                # kleiner Rücksprung bzw. teilweise Erholung: ignorieren
+                self._reset_candidate = None
             return
         self._reset_candidate = None
         self.total += reading - self.raw_last
