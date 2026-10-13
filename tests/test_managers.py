@@ -143,7 +143,6 @@ def test_remaining_and_progress():
     assert m.remaining == 0.0
 
 
-@pytest.mark.xfail(strict=True, reason="max(benefit, 0) kappt die Startgutschrift, breakdown zeigt aber negativen Betrag")
 def test_storage_initial_credit_matches_breakdown():
     cfg = {**STORAGE_CFG, c.CONF_INITIAL_DISCHARGE_KWH: 10, c.CONF_INITIAL_CHARGE_KWH: 100}
     m = make(StorageManager, cfg, RATES)

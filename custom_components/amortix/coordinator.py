@@ -598,4 +598,6 @@ class StorageManager(BaseManager):
             "entgangene_einspeisung_eur": round(-charge * feed_in, 2),
             "pauschal_eur": round(euro, 2),
         }
-        return euro + max(benefit, 0.0)
+        # wie im laufenden Betrieb (_async_evaluate) darf die Bilanz negativ sein,
+        # damit Summe und Aufschlüsselung übereinstimmen
+        return euro + benefit
