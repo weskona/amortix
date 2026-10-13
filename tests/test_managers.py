@@ -8,10 +8,16 @@ from custom_components.amortix import const as c
 from custom_components.amortix.coordinator import DirectManager, StorageManager
 
 
-def make(manager_cls, data, states):
+def make(manager_cls, data, states, units=None):
     hass = MagicMock()
+    units = units or {}
     hass.states.get.side_effect = lambda eid: (
-        SimpleNamespace(state=str(states[eid])) if eid in states else None
+        SimpleNamespace(
+            state=str(states[eid]),
+            attributes={"unit_of_measurement": units.get(eid)},
+        )
+        if eid in states
+        else None
     )
     entry = SimpleNamespace(entry_id="e1", title="Test", data=data, options={})
     return manager_cls(hass, entry)
@@ -282,3 +288,31 @@ def test_pending_storage_credit_survives_restart():
     second._async_tick()
     assert not second.initial_pending
     assert second.initial_credit == pytest.approx(100 * 0.30 - 120 * 0.08)
+
+
+# ----------------------------------------------------------------------
+# Preis-Einheiten: Cent wird in Euro umgerechnet
+# ----------------------------------------------------------------------
+@pytest.mark.parametrize("unit", ["ct/kWh", "c/kWh", "Cent/kWh", "ct/kWh "])
+def test_cent_price_is_converted_to_euro(unit):
+    states = {**RATES, "input_number.price": 30}
+    m = make(DirectManager, DIRECT_CFG, states, units={"input_number.price": unit})
+    assert m._current_price() == pytest.approx(0.30)
+
+
+@pytest.mark.parametrize("unit", ["€/kWh", "EUR/kWh", None])
+def test_euro_price_is_not_converted(unit):
+    m = make(DirectManager, DIRECT_CFG, dict(RATES), units={"input_number.price": unit})
+    assert m._current_price() == pytest.approx(0.30)
+
+
+def test_cent_feed_in_is_converted_to_euro():
+    states = {**RATES, "input_number.feed": 8}
+    m = make(DirectManager, DIRECT_CFG, states, units={"input_number.feed": "ct/kWh"})
+    assert m._current_feed_in() == pytest.approx(0.08)
+
+
+def test_investment_is_never_converted():
+    states = {**RATES, "input_number.inv": 1000}
+    m = make(DirectManager, DIRECT_CFG, states, units={"input_number.inv": "ct"})
+    assert m.investment == pytest.approx(1000)

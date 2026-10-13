@@ -48,6 +48,14 @@ RESET_DROP_RATIO = 0.5
 RESET_GUARD_UPDATES = 3
 
 
+def _is_cent_unit(unit: str | None) -> bool:
+    """True für Preis-Einheiten in Cent (z. B. 'ct/kWh', 'c/kWh', 'Cent/kWh')."""
+    if not unit:
+        return False
+    unit = unit.strip().lower()
+    return unit.startswith(("ct", "cent", "c/"))
+
+
 class MonotonicCounter:
     """Macht aus einem (ggf. resettenden) kWh-Zähler einen monoton steigenden Gesamtwert."""
 
@@ -142,15 +150,19 @@ class BaseManager:
     def config(self) -> dict:
         return {**self.entry.data, **self.entry.options}
 
-    def _read_entity(self, entity_id: str | None) -> float | None:
+    def _read_entity(self, entity_id: str | None, rate: bool = False) -> float | None:
+        """Entität als Zahl lesen; rate=True rechnet Cent-Einheiten in € um."""
         if not entity_id:
             return None
         state = self.hass.states.get(entity_id)
         if state and state.state not in INVALID_STATES:
             try:
-                return float(state.state)
+                value = float(state.state)
             except (ValueError, TypeError):
-                pass
+                return None
+            if rate and _is_cent_unit(state.attributes.get("unit_of_measurement")):
+                value /= 100.0
+            return value
         return None
 
     @property
@@ -162,7 +174,7 @@ class BaseManager:
         return self.last_investment
 
     def _current_price(self) -> float | None:
-        value = self._read_entity(self.config.get(CONF_PRICE_ENTITY))
+        value = self._read_entity(self.config.get(CONF_PRICE_ENTITY), rate=True)
         if value is not None:
             self.last_price = value
             return value
@@ -172,7 +184,7 @@ class BaseManager:
         entity_id = self.config.get(CONF_FEED_IN_ENTITY)
         if not entity_id:
             return 0.0
-        value = self._read_entity(entity_id)
+        value = self._read_entity(entity_id, rate=True)
         if value is not None:
             self.last_feed_in = value
             return value
