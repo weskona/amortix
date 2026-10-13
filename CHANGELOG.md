@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Unit tests (`tests/`, pytest) for `MonotonicCounter`, the direct-use and storage valuation logic and the deferred starting credit.
+- Unit tests (`tests/`, pytest, run in GitHub Actions on Python 3.12 and 3.13) for `MonotonicCounter`, the direct-use and storage valuation logic and the deferred starting credit.
 - README (EN/DE): documentation of reset handling, the deferred starting credit and a new "Limitations" section (grid charging in storage mode is not priced, linear projection, negative prices, resets below 50 %, price units in €/kWh).
 
 ### Changed
