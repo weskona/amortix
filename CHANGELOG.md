@@ -7,11 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-13
+
 ### Added
 - Four new modes: **PV with storage** (combined, handles grid charging), **Wallbox / EV**, **Heat pump** (incl. coefficient of performance) and **General** (kWh counter against a reference price). Each has its own setup dialog, options flow, sensors and German/English texts.
 - Price entities may be `input_number`, `number` or (dynamic) sensors; prices reported in ct/kWh are converted to €/kWh automatically.
 - Starting credit for the new modes: flat amount and/or automatically from the current meter readings.
 - README (EN/DE): documentation of all modes and a note on the battery-to-grid limitation.
+
+### Changed
+- Price and feed-in entities reporting ct/kWh are converted to €/kWh automatically (also in the existing Direct use and Storage modes).
+- Price entities can additionally be `number` entities.
+- The "same sensor" error message now covers all modes.
 
 ## [1.1.0] - 2026-10-13
 
@@ -62,7 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Investment, price and feed-in tariff adjustable afterwards via **Configure**.
 - English and German translations.
 
-[Unreleased]: https://github.com/weskona/amortix/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/weskona/amortix/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/weskona/amortix/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/weskona/amortix/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/weskona/amortix/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/weskona/amortix/compare/v1.0.0...v1.0.1
