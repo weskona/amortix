@@ -378,6 +378,10 @@ class BaseManager(MetricsMixin):
             self._unsub_timer()
             self._unsub_timer = None
 
+    async def async_flush(self) -> None:
+        """Ausstehendes verzögertes Speichern sofort schreiben (Unload/Reload)."""
+        await self.store.async_save(self._data_to_save())
+
     # ------------------------------------------------------------------
     def add_listener(self, cb: CALLBACK_TYPE) -> CALLBACK_TYPE:
         self._listeners.append(cb)
@@ -1190,6 +1194,9 @@ class PlantManager(DeltaManager):
 
     def _after_restore(self) -> None:
         """Geänderte/neu hinzugefügte Startwerte je Gerät als Differenz nachbuchen."""
+        if self.initial_pending:
+            # Die Startgutschrift (inkl. Geräte-Startwerte) wird erst noch gebucht
+            return
         changed = False
         for key in self.dev_savings:
             diff = self._flat(key) - self.applied_flat.get(key, 0.0)
@@ -1285,6 +1292,9 @@ class OverviewManager(MetricsMixin):
             self._unsub_signal()
             self._unsub_signal = None
         self._unbind()
+
+    async def async_flush(self) -> None:
+        """Nichts zu speichern."""
 
     def _unbind(self) -> None:
         for unsub in self._unsubs:
