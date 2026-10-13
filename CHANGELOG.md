@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Four new modes: **PV with storage** (combined, handles grid charging), **Wallbox / EV**, **Heat pump** (incl. coefficient of performance) and **General** (kWh counter against a reference price). Each has its own setup dialog, options flow, sensors and German/English texts.
+- Price entities may be `input_number`, `number` or (dynamic) sensors; prices reported in ct/kWh are converted to €/kWh automatically.
+- Starting credit for the new modes: flat amount and/or automatically from the current meter readings.
+- README (EN/DE): documentation of all modes and a note on the battery-to-grid limitation.
+
 ## [1.1.0] - 2026-10-13
 
 ### Added

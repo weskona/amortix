@@ -17,7 +17,7 @@ A **device-agnostic amortization tracker for Home Assistant**. From cumulative k
 ## Features
 
 - **Device-agnostic** — works with any HA entity that reports cumulative kWh (inverter, wallbox, BMS, ...), no manufacturer integration required.
-- **Two modes** — Direct consumption (balcony/PV without storage) or Storage (battery charge/discharge balance), each with its own sensor set.
+- **Six modes** — Direct consumption (balcony/PV without storage), Storage (battery charge/discharge balance), PV with storage combined, Wallbox/EV, Heat pump, and a General comparison for anything else — each with its own sensor set.
 - **Measured, not estimated** — evaluates every 60 seconds against your actual live price/tariff entities, so it stays accurate with dynamic tariffs instead of a flat average.
 - **Multiple production sources** — select several production sensors at once (e.g. balcony + roof PV); they're summed automatically.
 - **Starting credit** — an already-running system can start with its accumulated savings applied, either entered manually or computed automatically from current meter readings.
@@ -59,8 +59,16 @@ Click the button above to add Amortix to HACS, then **Download** and restart Hom
 |------|-------------------|----------|-------------|
 | **Direct use** (balcony/PV without storage) | Production (one or more), export/`to_grid` | Feed-in tariff entity, starting credit | `self-consumption × grid price + export × feed-in tariff` |
 | **Storage** | Charge, discharge | Roundtrip-efficiency sensor, feed-in tariff entity, starting credit | `discharge × grid price − charge × feed-in tariff` |
+| **PV with storage** (combined) | Production (one or more), export, battery charge, battery discharge | Feed-in tariff entity, starting credit | `(production − export − charge + discharge) × grid price + export × feed-in tariff` |
+| **Wallbox / EV** | Charged energy | Own price entity, starting credit | `kWh × (reference price − own price)` |
+| **Heat pump** | Heat (kWh), electricity consumption (kWh) | Starting credit | `heat × reference price − electricity × grid price` |
+| **General** | One kWh counter | Own price entity, starting credit | `kWh × (reference price − own price)` |
 
-Both modes also require an **investment cost** entity and a **grid price** entity (`input_number` or sensor — a live tariff sensor such as Tibber works too).
+All modes also require an **investment cost** entity. Direct use, Storage and PV with storage need a **grid price** entity, Wallbox/General a **reference price** (what the same kWh would otherwise cost, e.g. a public charger or fuel per kWh) and optionally an **own price**, Heat pump a grid price and a **reference price per kWh of heat** (e.g. gas price ÷ boiler efficiency).
+
+All price entities can be an `input_number`, a `number`, or a sensor — **including dynamic tariffs** such as Tibber, which are read live every minute. Prices reported in **ct/kWh are converted to €/kWh automatically**; if a sensor is briefly unavailable, the last known price is used.
+
+**PV with storage in one entry** values every counter on its own at the price valid at that moment, so charging losses cost the grid price automatically, and **charging from the grid** (e.g. at a cheap night tariff) is handled correctly: charging costs at charge time, discharging earns the price valid at discharge time. The new modes accept a starting credit as a flat amount and/or computed automatically from the current meter readings.
 
 Requirements for all sensors:
 - **Cumulative kWh meters** (`state_class: total`/`total_increasing`), not watt sensors.
@@ -82,6 +90,34 @@ Requirements for all sensors:
 | `tagesschnitt` | Ersparnis pro Tag | Average daily savings (€) since the starting credit was applied. `unknown` with less than 12 hours of history or no net savings yet. |
 | `resttage` | Amortisation Restzeit | Estimated days remaining until payback, from the daily average. |
 | `datum` | Amortisation Datum | Estimated payback date/time, from the daily average. |
+
+### PV with storage only
+
+| Key | Name | Description |
+|-----|------|--------------|
+| `einsparung` | Einsparung gesamt | Total savings (€) including the starting credit. Attributes: `startgutschrift_eur`, `einsparung_seit_start_eur`, `erzeugung_kwh`, `einspeisung_kwh`, `ladung_kwh`, `entladung_kwh`, `inbetriebnahme`. |
+| `einsparung_netzbezug` | Einsparung Netzbezug | Savings (€) from avoided grid purchase (self-supply incl. battery, minus charging). |
+| `einsparung_einspeisung` | Einsparung Einspeisung | Revenue (€) from feed-in. |
+| `eigenverbrauch` | Eigenverbrauch gesamt | Production − export (kWh), includes energy that went into the battery. |
+| `erzeugung`, `ladung`, `entladung` | Erzeugung / Ladung / Entladung gesamt | Total energy (kWh). |
+| `roundtrip` | Roundtrip-Wirkungsgrad | `discharge ÷ charge` (%). |
+
+### Wallbox / EV and General only
+
+| Key | Name | Description |
+|-----|------|--------------|
+| `einsparung` | Einsparung gesamt | Total savings (€) including the starting credit. |
+| `energie` | Energie gesamt | Total energy (kWh). |
+
+### Heat pump only
+
+| Key | Name | Description |
+|-----|------|--------------|
+| `einsparung` | Einsparung gesamt | Total savings (€) including the starting credit. |
+| `einsparung_waerme` | Einsparung Wärme | Value (€) of the heat compared with the reference heating. |
+| `stromkosten` | Stromkosten Wärmepumpe | Electricity cost (€, negative). |
+| `waerme`, `strom` | Wärme / Strom gesamt | Total heat and electricity (kWh). |
+| `jaz` | Arbeitszahl | Coefficient of performance, `heat ÷ electricity`. |
 
 ### Direct use only
 
@@ -118,6 +154,7 @@ Amortix doesn't estimate — it evaluates your configured sensors every 60 secon
 - **Storage: charging from the grid isn't priced.** The storage calculation assumes the battery is charged from your own PV surplus: charged energy only costs the feed-in tariff you would have received. If you also charge from the grid (dynamic tariff, night rate), the cost of that electricity is **not** deducted and the savings are overstated.
 - **Projection is linear.** *Savings per day*, *Remaining time* and *Payback date* extrapolate the average since setup. With PV the yield is strongly seasonal, so a start in winter or summer skews the estimate; it becomes more reliable after a full year.
 - **Negative prices.** If the price entity goes negative (dynamic tariffs), self-consumed energy is valued negatively as well.
+- **PV with storage: battery feeding the grid.** If the battery exports to the grid, that energy is part of the export and valued at the feed-in tariff instead of the grid price.
 - **Meter resets.** A reset that only drops the reading by less than half (e.g. 12 → 8 kWh) is treated as a normal correction and not detected, since treating every moderate dip as a reset would risk counting energy twice.
 - **Sensor units.** Price entities must provide €/kWh (not ct/kWh), energy sensors kWh.
 ---

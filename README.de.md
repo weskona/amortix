@@ -17,7 +17,7 @@ Eine **geräteunabhängige Amortisations-Integration für Home Assistant**. Amor
 ## Funktionen
 
 - **Geräteunabhängig** — funktioniert mit jeder HA-Entität, die kumulierende kWh liefert (Wechselrichter, Wallbox, BMS, ...), keine Hersteller-Integration nötig.
-- **Zwei Modi** — Direktverbrauch (Balkonkraftwerk/PV ohne Speicher) oder Speicher (Batterie-Lade-/Entladebilanz), jeweils mit eigenem Sensor-Set.
+- **Sechs Modi** — Direktverbrauch (Balkonkraftwerk/PV ohne Speicher), Speicher (Batterie-Lade-/Entladebilanz), PV mit Speicher kombiniert, Wallbox/E-Auto, Wärmepumpe und ein allgemeiner Vergleich für alles andere — jeweils mit eigenem Sensor-Set.
 - **Gemessen statt geschätzt** — wertet alle 60 Sekunden gegen deine echten, live gelesenen Preis-/Tarif-Entitäten aus, bleibt dadurch auch bei dynamischen Tarifen genau, statt mit einem pauschalen Durchschnitt zu rechnen.
 - **Mehrere Erzeugungsquellen** — mehrere Erzeugungssensoren gleichzeitig auswählbar (z. B. Balkonkraftwerk + Dach-PV); werden automatisch summiert.
 - **Startgutschrift** — eine bereits laufende Anlage kann mit ihrer bisher aufgelaufenen Ersparnis starten, entweder manuell eingegeben oder automatisch aus den aktuellen Zählerständen berechnet.
@@ -59,8 +59,16 @@ Auf den Button oben klicken, um Amortix zu HACS hinzuzufügen, dann **Herunterla
 |-------|------------------|----------|----------|
 | **Direktverbrauch** (BKW/PV ohne Speicher) | Erzeugung (ein oder mehrere), Einspeisung/`to_grid` | Einspeisevergütung, Startgutschrift | `Eigenverbrauch × Strompreis + Einspeisung × Vergütung` |
 | **Speicher** | Ladung, Entladung | Roundtrip-Wirkungsgrad-Sensor, Einspeisevergütung, Startgutschrift | `Entladung × Strompreis − Ladung × Vergütung` |
+| **PV mit Speicher** (kombiniert) | Erzeugung (ein oder mehrere), Einspeisung, Batterie-Ladung, Batterie-Entladung | Einspeisevergütung, Startgutschrift | `(Erzeugung − Einspeisung − Ladung + Entladung) × Strompreis + Einspeisung × Vergütung` |
+| **Wallbox / E-Auto** | Geladene Energie | Eigener Preis, Startgutschrift | `kWh × (Vergleichspreis − eigener Preis)` |
+| **Wärmepumpe** | Wärme (kWh), Stromverbrauch (kWh) | Startgutschrift | `Wärme × Referenzpreis − Strom × Strompreis` |
+| **Allgemein** | Ein kWh-Zähler | Eigener Preis, Startgutschrift | `kWh × (Vergleichspreis − eigener Preis)` |
 
-Beide Modi benötigen außerdem eine Entität für **Anschaffungskosten** und eine für den **Strompreis** (`input_number` oder Sensor — auch ein Live-Tarifsensor wie Tibber funktioniert).
+Alle Modi benötigen außerdem eine Entität für **Anschaffungskosten**. Direktverbrauch, Speicher und PV mit Speicher brauchen einen **Strompreis**, Wallbox/Allgemein einen **Vergleichspreis** (was dieselbe kWh sonst kosten würde, z. B. öffentliche Ladesäule oder Kraftstoff pro kWh) und optional einen **eigenen Preis**, die Wärmepumpe einen Strompreis und einen **Referenzpreis pro kWh Wärme** (z. B. Gaspreis ÷ Kesselwirkungsgrad).
+
+Alle Preis-Entitäten können ein `input_number`, ein `number` oder ein Sensor sein — **auch dynamische Tarife** wie Tibber, die jede Minute live gelesen werden. Preise in **ct/kWh werden automatisch in €/kWh umgerechnet**; fällt ein Sensor kurz aus, gilt der letzte bekannte Preis.
+
+**PV mit Speicher in einem Eintrag** bewertet jeden Zähler einzeln zum jeweils aktuellen Preis. Ladeverluste kosten so automatisch den Strompreis, und **Laden aus dem Netz** (z. B. im günstigen Nachttarif) ist korrekt abgebildet: Die Ladung kostet beim Laden, die Entladung bringt beim Entladen den dann gültigen Preis. Die neuen Modi akzeptieren eine Startgutschrift als Pauschalbetrag und/oder automatisch aus den aktuellen Zählerständen.
 
 Anforderungen an alle Sensoren:
 - **Kumulierende kWh-Zähler** (`state_class: total`/`total_increasing`), keine Watt-Sensoren.
@@ -82,6 +90,34 @@ Anforderungen an alle Sensoren:
 | `tagesschnitt` | Ersparnis pro Tag | Durchschnittliche Tagesersparnis (€) seit Anwendung der Startgutschrift. `unknown` bei weniger als 12 Stunden Historie oder ohne Netto-Ersparnis. |
 | `resttage` | Amortisation Restzeit | Geschätzte Resttage bis zur Amortisation, aus dem Tagesdurchschnitt. |
 | `datum` | Amortisation Datum | Geschätztes Amortisations-Datum/-Uhrzeit, aus dem Tagesdurchschnitt. |
+
+### Nur PV mit Speicher
+
+| Key | Name | Beschreibung |
+|-----|------|--------------|
+| `einsparung` | Einsparung gesamt | Gesamtersparnis (€) inklusive Startgutschrift. Attribute: `startgutschrift_eur`, `einsparung_seit_start_eur`, `erzeugung_kwh`, `einspeisung_kwh`, `ladung_kwh`, `entladung_kwh`, `inbetriebnahme`. |
+| `einsparung_netzbezug` | Einsparung Netzbezug | Ersparnis (€) durch vermiedenen Netzbezug (Eigenversorgung inkl. Batterie, abzüglich Ladung). |
+| `einsparung_einspeisung` | Einsparung Einspeisung | Erlös (€) durch Einspeisung. |
+| `eigenverbrauch` | Eigenverbrauch gesamt | Erzeugung − Einspeisung (kWh), enthält die in die Batterie geladene Energie. |
+| `erzeugung`, `ladung`, `entladung` | Erzeugung / Ladung / Entladung gesamt | Gesamtenergie (kWh). |
+| `roundtrip` | Roundtrip-Wirkungsgrad | `Entladung ÷ Ladung` (%). |
+
+### Nur Wallbox / E-Auto und Allgemein
+
+| Key | Name | Beschreibung |
+|-----|------|--------------|
+| `einsparung` | Einsparung gesamt | Gesamtersparnis (€) inklusive Startgutschrift. |
+| `energie` | Energie gesamt | Gesamtenergie (kWh). |
+
+### Nur Wärmepumpe
+
+| Key | Name | Beschreibung |
+|-----|------|--------------|
+| `einsparung` | Einsparung gesamt | Gesamtersparnis (€) inklusive Startgutschrift. |
+| `einsparung_waerme` | Einsparung Wärme | Wert (€) der Wärme gegenüber der Referenzheizung. |
+| `stromkosten` | Stromkosten Wärmepumpe | Stromkosten (€, negativ). |
+| `waerme`, `strom` | Wärme / Strom gesamt | Gesamte Wärme und Strom (kWh). |
+| `jaz` | Arbeitszahl | `Wärme ÷ Strom`. |
 
 ### Nur Direktverbrauch
 
@@ -118,6 +154,7 @@ Amortix schätzt nicht — es wertet alle 60 Sekunden die konfigurierten Sensore
 - **Speicher: Netzladung wird nicht bepreist.** Die Speicher-Rechnung geht davon aus, dass der Akku aus eigenem PV-Überschuss geladen wird: Geladene Energie „kostet" nur die entgangene Einspeisevergütung. Wird zusätzlich aus dem Netz geladen (dynamischer Tarif, Nachtstrom), werden die Kosten dieses Stroms **nicht** abgezogen und die Ersparnis fällt zu hoch aus.
 - **Prognose ist linear.** *Ersparnis pro Tag*, *Restzeit* und *Datum* extrapolieren den Durchschnitt seit der Einrichtung. Bei PV ist der Ertrag stark saisonal, ein Start im Winter oder Sommer verzerrt die Schätzung; nach einem vollen Jahr wird sie belastbarer.
 - **Negative Preise.** Wird die Preis-Entität negativ (dynamische Tarife), wird Eigenverbrauch ebenfalls negativ bewertet.
+- **PV mit Speicher: Batterie speist ins Netz.** Exportiert die Batterie ins Netz, zählt das zur Einspeisung und wird mit der Vergütung statt dem Strompreis bewertet.
 - **Zähler-Resets.** Ein Reset, der den Wert um weniger als die Hälfte senkt (z. B. 12 → 8 kWh), gilt als normale Korrektur und wird nicht erkannt — jeden mäßigen Rücksprung als Reset zu behandeln würde Energie doppelt zählen.
 - **Einheiten.** Preis-Entitäten müssen €/kWh liefern (nicht ct/kWh), Energie-Sensoren kWh.
 ---
