@@ -355,3 +355,49 @@ def test_replaced_export_sensor_keeps_history():
     assert after.total("export") == pytest.approx(before.total("export"))
     after._async_evaluate()
     assert after.total_savings == pytest.approx(before.total_savings)
+
+
+def test_pending_credit_with_device_flat_values_is_booked_once_after_restart():
+    cfg = {
+        **PLANT_CFG,
+        c.CONF_INITIAL_AUTO: True,
+        c.CONF_DEVICES: [
+            {**PLANT_CFG[c.CONF_DEVICES][0], "initial_savings": 100},
+            *PLANT_CFG[c.CONF_DEVICES][1:],
+        ],
+    }
+    first = make(PlantManager, cfg, dict(STATES))
+    start(first)
+    assert first.initial_pending
+    saved = first._data_to_save()
+
+    readable = {
+        **STATES,
+        "sensor.pv": 800, "sensor.bkw1": 100, "sensor.bkw2": 100,
+        "sensor.grid": 300, "sensor.dc_c": 200, "sensor.dc_d": 160,
+    }
+    second = restart(PlantManager, cfg, readable, saved)
+    assert second.total_savings == 0.0            # Startwerte warten auf die Gutschrift
+    second._async_tick()
+    assert not second.initial_pending
+    assert second.total_savings == pytest.approx(second.initial_credit)
+    assert sum(second.dev_savings.values()) == pytest.approx(second.total_savings)
+    assert second.dev_initial["prod0"] >= 100
+
+
+def test_plant_investment_is_unknown_while_a_configured_cost_entity_is_unreadable():
+    states = {k: v for k, v in STATES.items() if k != "input_number.inv_dc"}
+    m = make(PlantManager, PLANT_CFG, states)
+    assert m.investment is None
+    states["input_number.inv_dc"] = 5000
+    assert m.investment == pytest.approx(14000)
+
+
+def test_plant_device_without_cost_entity_is_skipped_in_investment():
+    cfg = {**PLANT_CFG, c.CONF_DEVICES: [
+        PLANT_CFG[c.CONF_DEVICES][0],
+        {"sensor": "sensor.bkw1", "name": "BKW 1"},
+        PLANT_CFG[c.CONF_DEVICES][2],
+    ]}
+    m = make(PlantManager, cfg, dict(STATES))
+    assert m.investment == pytest.approx(8000 + 500 + 5000)

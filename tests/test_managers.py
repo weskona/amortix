@@ -73,19 +73,32 @@ def test_direct_uses_price_at_time_of_evaluation():
     assert m.total_savings == pytest.approx(0.30 + 0.50)
 
 
-def test_direct_lagging_grid_sensor_nets_out_eventually():
-    m = make(DirectManager, DIRECT_CFG, RATES)
-    prod = m.prod_counters["sensor.prod"]
-    prod.total = 5.0            # Erzeugung aktualisiert, Einspeisung hinkt
-    m._async_evaluate()
-    m.grid.total = 5.0          # Einspeisung holt auf
-    m._async_evaluate()
-    assert m.credited_self == pytest.approx(5.0)       # Maximum bleibt stehen
-    assert m.credited_grid == pytest.approx(5.0)
-    prod.total = 8.0
-    m._async_evaluate()
-    # erst wenn raw_self (8-5=3) das alte Maximum (5) ueberschreitet, gibt es wieder Eigenverbrauch
-    assert m.credited_self == pytest.approx(5.0)
+def test_direct_sensor_update_order_does_not_change_total():
+    def run(order):
+        m = make(DirectManager, DIRECT_CFG, RATES)
+        prod = m.prod_counters["sensor.prod"]
+        for name in order:
+            if name == "prod":
+                prod.total = 5.0
+            else:
+                m.grid.total = 5.0
+            m._async_evaluate()
+        return m
+
+    prod_first, grid_first = run(["prod", "grid"]), run(["grid", "prod"])
+    for m in (prod_first, grid_first):
+        assert m.total_savings == pytest.approx(5.0 * 0.08)   # alles eingespeist
+        assert m.savings_self == pytest.approx(0.0)
+        assert m.savings_export == pytest.approx(5.0 * 0.08)
+        assert m.credited_self == pytest.approx(0.0)
+        assert m.credited_grid == pytest.approx(5.0)
+
+
+def test_direct_restores_old_state_without_credited_prod():
+    saved = {"credited_self": 3.0, "credited_grid": 2.0}
+    m = restart(DirectManager, DIRECT_CFG, RATES, saved)
+    assert m.credited_prod == pytest.approx(5.0)
+    assert m.credited_self == pytest.approx(3.0)
 
 
 def test_direct_no_price_means_no_evaluation():
@@ -316,3 +329,15 @@ def test_investment_is_never_converted():
     states = {**RATES, "input_number.inv": 1000}
     m = make(DirectManager, DIRECT_CFG, states, units={"input_number.inv": "ct"})
     assert m.investment == pytest.approx(1000)
+
+
+def test_flush_writes_current_state_immediately():
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    m = make(DirectManager, DIRECT_CFG, RATES)
+    m.total_savings = 12.5
+    m.store.async_save = AsyncMock()
+    asyncio.run(m.async_flush())
+    m.store.async_save.assert_awaited_once()
+    assert m.store.async_save.await_args.args[0]["total_savings"] == 12.5

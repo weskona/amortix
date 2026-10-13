@@ -72,6 +72,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         manager = hass.data[DOMAIN].pop(entry.entry_id, None)
         if manager is not None:
             manager.async_stop()
+            if hasattr(manager, "async_flush"):
+                await manager.async_flush()
         async_dispatcher_send(hass, SIGNAL_MANAGERS_CHANGED)
     return unload_ok
 
