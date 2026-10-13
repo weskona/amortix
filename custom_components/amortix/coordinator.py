@@ -40,38 +40,75 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
+# Ein Wert unter diesem Anteil des letzten Stands gilt als Reset-/Glitch-Kandidat;
+# kleinere Rücksprünge (Rundung, Korrekturen) werden ignoriert.
+RESET_DROP_RATIO = 0.5
+# So viele Updates nach einer Reset-Bestätigung wird ein Sprung zurück auf den
+# alten Stand noch als Glitch erkannt und die Buchung zurückgenommen.
+RESET_GUARD_UPDATES = 3
+
+
 class MonotonicCounter:
     """Macht aus einem (ggf. resettenden) kWh-Zähler einen monoton steigenden Gesamtwert."""
 
     def __init__(self) -> None:
         self.raw_last: float | None = None
         self.total: float = 0.0
-        # Erster stark abgefallener Wert nach einem echten Reset UND ein
-        # einmaliger "0 statt unavailable"-Glitch (Cloud-Integrationen wie
-        # Alpha ESS melden das theoretisch so) sehen fuer sich genommen
-        # identisch aus. Ein Reset wird daher erst nach zwei aufeinander-
-        # folgenden niedrigen Werten bestaetigt -- erholt sich der Zaehler
-        # dazwischen wieder (Glitch), verwirft update() den Kandidaten und
-        # rechnet normal gegen den unveraenderten raw_last weiter, ohne die
-        # Energie doppelt zu zaehlen.
+        # Ein echter Reset und ein "0 statt unavailable"-Glitch (Cloud-
+        # Integrationen wie Alpha ESS melden das theoretisch so) sehen beim
+        # ersten niedrigen Wert identisch aus. Ein Reset wird daher erst
+        # bestätigt, wenn ein zweiter niedriger Wert folgt, der nicht weiter
+        # fällt. Erholt sich der Zähler dazwischen (Glitch), wird der Kandidat
+        # verworfen, ohne Energie doppelt zu zählen.
         self._reset_candidate: float | None = None
+        # Hält der Glitch länger (z. B. zweimal "0" hintereinander) und wurde
+        # deshalb ein Reset bestätigt, merkt sich der Guard (alter Stand,
+        # gebuchte kWh, Rest-Updates). Springt der Zähler dann zurück auf den
+        # alten Stand, wird die irrtümliche Buchung zurückgenommen.
+        self._guard: tuple[float, float, int] | None = None
 
     def restore(self, raw_last: float | None, total: float) -> None:
         self.raw_last = raw_last
         self.total = total
 
+    @property
+    def initial(self) -> float:
+        """Zählerstand beim ersten Lesen (0, solange der Zähler noch nie gelesen wurde)."""
+        if self.raw_last is None:
+            return 0.0
+        return max(self.raw_last - self.total, 0.0)
+
     def update(self, reading: float) -> None:
         if self.raw_last is None:
             self.raw_last = reading
             return
+
+        if self._guard is not None:
+            old_raw, added, ttl = self._guard
+            if reading >= old_raw:
+                # Der "Reset" war ein Glitch: alles seit der Bestätigung
+                # Gebuchte (= raw_last) zurücknehmen, ab dem alten Stand weiterzählen.
+                self.total += (reading - old_raw) - self.raw_last
+                self.raw_last = reading
+                self._guard = None
+                self._reset_candidate = None
+                return
+            self._guard = (old_raw, added, ttl - 1) if ttl > 1 else None
+
         if reading < self.raw_last:
-            if reading < self.raw_last * 0.1:  # moeglicher Reset auf ~0
-                if self._reset_candidate is not None:
+            if reading < self.raw_last * RESET_DROP_RATIO:  # möglicher Reset
+                candidate = self._reset_candidate
+                if candidate is None or reading < candidate:
+                    self._reset_candidate = reading
+                else:
+                    # zweiter niedriger Wert, der nicht weiter fällt: Reset
                     self.total += max(reading, 0.0)
+                    self._guard = (self.raw_last, max(reading, 0.0), RESET_GUARD_UPDATES)
                     self.raw_last = reading
                     self._reset_candidate = None
-                else:
-                    self._reset_candidate = reading
+            else:
+                # kleiner Rücksprung bzw. teilweise Erholung: ignorieren
+                self._reset_candidate = None
             return
         self._reset_candidate = None
         self.total += reading - self.raw_last
@@ -93,6 +130,8 @@ class BaseManager:
         self.last_feed_in: float | None = None
         self.last_investment: float | None = None
         self.start_time: str | None = None
+        # Startgutschrift wartet noch auf Sensoren/Preise (beim ersten Start nicht verfügbar)
+        self.initial_pending: bool = False
 
         self._listeners: list[CALLBACK_TYPE] = []
         self._unsub_state: CALLBACK_TYPE | None = None
@@ -153,6 +192,7 @@ class BaseManager:
             self.last_feed_in = data.get("last_feed_in")
             self.last_investment = data.get("last_investment")
             self.start_time = data.get("start_time")
+            self.initial_pending = data.get("initial_pending", False)
             self._restore_counters(data)
 
         if not self.start_time:
@@ -163,16 +203,54 @@ class BaseManager:
             self._seed(entity_id, counter)
 
         if first_run:
-            self.initial_credit = self._compute_initial_credit()
-            self.total_savings = self.initial_credit
+            if self._initial_ready():
+                self._apply_initial_credit()
+            else:
+                # Sensoren/Preise sind noch nicht verfügbar: nicht still mit 0 starten,
+                # sondern die Startgutschrift nachholen, sobald alles lesbar ist.
+                self.initial_pending = True
+                _LOGGER.warning(
+                    "Amortix %s: Startgutschrift wird berechnet, sobald alle "
+                    "Sensoren und Preise verfügbar sind",
+                    self.entry.title,
+                )
 
         self._unsub_state = async_track_state_change_event(
             self.hass, list(counters.keys()), self._handle_event
         )
         self._unsub_timer = async_track_time_interval(
-            self.hass, self._async_evaluate, timedelta(seconds=EVALUATION_INTERVAL)
+            self.hass, self._async_tick, timedelta(seconds=EVALUATION_INTERVAL)
         )
         self._schedule_save()
+
+    def _apply_initial_credit(self) -> None:
+        credit = self._compute_initial_credit()
+        self.initial_credit = credit
+        self.total_savings += credit
+        self.initial_pending = False
+        self._schedule_save()
+
+    def _initial_ready(self) -> bool:
+        """Alles lesbar, was die Startgutschrift braucht? Sonst wäre sie still 0."""
+        cfg = self.config
+        if float(cfg.get(CONF_INITIAL_PRICE, 0) or 0) <= 0 and self._current_price() is None:
+            return False
+        feed_in_entity = cfg.get(CONF_FEED_IN_ENTITY)
+        if (
+            feed_in_entity
+            and float(cfg.get(CONF_INITIAL_FEED_IN, 0) or 0) <= 0
+            and self._read_entity(feed_in_entity) is None
+            and self.last_feed_in is None
+        ):
+            return False
+        return self._initial_sources_ready()
+
+    @callback
+    def _async_tick(self, now=None) -> None:
+        if self.initial_pending and self._initial_ready():
+            self._apply_initial_credit()
+            self._notify()
+        self._async_evaluate(now)
 
     def _seed(self, entity_id: str, counter: MonotonicCounter) -> None:
         if counter.raw_last is not None:
@@ -236,6 +314,7 @@ class BaseManager:
             "last_feed_in": self.last_feed_in,
             "last_investment": self.last_investment,
             "start_time": self.start_time,
+            "initial_pending": self.initial_pending,
         }
         data.update(self._extra_save())
         return data
@@ -316,6 +395,10 @@ class BaseManager:
     def _async_evaluate(self, now=None) -> None:
         raise NotImplementedError
 
+    def _initial_sources_ready(self) -> bool:
+        """Subklasse: sind die für die automatische Startgutschrift nötigen Zähler gelesen?"""
+        raise NotImplementedError
+
     def _compute_initial_credit(self) -> float:
         raise NotImplementedError
 
@@ -358,8 +441,15 @@ class DirectManager(BaseManager):
     def _prod_total(self) -> float:
         return sum(c.total for c in self.prod_counters.values())
 
-    def _prod_raw(self) -> float:
-        return sum((c.raw_last or 0.0) for c in self.prod_counters.values())
+    def _prod_initial(self) -> float:
+        return sum(c.initial for c in self.prod_counters.values())
+
+    def _initial_sources_ready(self) -> bool:
+        if not self.config.get(CONF_INITIAL_AUTO):
+            return True
+        return self.grid.raw_last is not None and all(
+            c.raw_last is not None for c in self.prod_counters.values()
+        )
 
     def _counters(self) -> dict[str, MonotonicCounter]:
         result = dict(self.prod_counters)
@@ -448,8 +538,10 @@ class DirectManager(BaseManager):
         euro = float(cfg.get(CONF_INITIAL_SAVINGS, 0) or 0)
         price, feed_in = self._initial_rates()
         if cfg.get(CONF_INITIAL_AUTO):
-            self_kwh = max(self._prod_raw() - (self.grid.raw_last or 0.0), 0.0)
-            export = self.grid.raw_last or 0.0
+            # Stand beim ersten Lesen (raw_last - total), falls ein Sensor erst
+            # nach dem Start verfügbar wurde
+            export = self.grid.initial
+            self_kwh = max(self._prod_initial() - export, 0.0)
         else:
             self_kwh = float(cfg.get(CONF_INITIAL_SELF_KWH, 0) or 0)
             export = float(cfg.get(CONF_INITIAL_EXPORT_KWH, 0) or 0)
@@ -506,6 +598,11 @@ class StorageManager(BaseManager):
             "base_discharge": self.base_discharge,
         }
 
+    def _initial_sources_ready(self) -> bool:
+        if not self.config.get(CONF_INITIAL_AUTO):
+            return True
+        return self.charge.raw_last is not None and self.discharge.raw_last is not None
+
     @property
     def total_charged(self) -> float:
         return self.base_charge + self.charge.total
@@ -555,8 +652,8 @@ class StorageManager(BaseManager):
         euro = float(cfg.get(CONF_INITIAL_SAVINGS, 0) or 0)
         price, feed_in = self._initial_rates()
         if cfg.get(CONF_INITIAL_AUTO):
-            discharge = self.discharge.raw_last or 0.0
-            charge = self.charge.raw_last or 0.0
+            discharge = self.discharge.initial
+            charge = self.charge.initial
         else:
             discharge = float(cfg.get(CONF_INITIAL_DISCHARGE_KWH, 0) or 0)
             charge = float(cfg.get(CONF_INITIAL_CHARGE_KWH, 0) or 0)
@@ -568,4 +665,6 @@ class StorageManager(BaseManager):
             "entgangene_einspeisung_eur": round(-charge * feed_in, 2),
             "pauschal_eur": round(euro, 2),
         }
-        return euro + max(benefit, 0.0)
+        # wie im laufenden Betrieb (_async_evaluate) darf die Bilanz negativ sein,
+        # damit Summe und Aufschlüsselung übereinstimmen
+        return euro + benefit

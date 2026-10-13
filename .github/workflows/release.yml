@@ -45,7 +45,34 @@ jobs:
           cd custom_components/amortix
           zip -r amortix.zip ./*
 
+      - name: Extract release notes from CHANGELOG.md
+        id: notes
+        run: |
+          # Section "## [<version>]"; falls back to "## [Unreleased]" if the
+          # version has no section yet. No section found -> keep the notes
+          # that were written manually on the release.
+          extract() {
+            awk -v h="## [$1]" '
+              index($0, h) == 1 { found = 1; next }
+              found && /^## \[/ { exit }
+              found && /^\[[^]]+\]: / { exit }
+              found { print }
+            ' CHANGELOG.md | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba' -e '}'
+          }
+          notes="$(extract "${version}")"
+          if [ -z "$notes" ]; then
+            notes="$(extract "Unreleased")"
+          fi
+          if [ -n "$notes" ]; then
+            printf '%s\n' "$notes" > release_notes.md
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No changelog entry found, keeping existing release notes"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload ZIP to release
         uses: softprops/action-gh-release@v2
         with:
           files: custom_components/amortix/amortix.zip
+          body_path: ${{ steps.notes.outputs.found == 'true' && 'release_notes.md' || '' }}
