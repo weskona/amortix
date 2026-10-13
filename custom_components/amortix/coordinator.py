@@ -303,6 +303,9 @@ class BaseManager(MetricsMixin):
         for entity_id, counter in counters.items():
             self._seed(entity_id, counter)
 
+        if not first_run:
+            self._after_restore()
+
         if first_run:
             if self._initial_ready():
                 self._apply_initial_credit()
@@ -323,6 +326,9 @@ class BaseManager(MetricsMixin):
             self.hass, self._async_tick, timedelta(seconds=EVALUATION_INTERVAL)
         )
         self._schedule_save()
+
+    def _after_restore(self) -> None:
+        """Hook nach dem Laden gespeicherter Daten (Subklassen z. B. für Konfig-Änderungen)."""
 
     def _apply_initial_credit(self) -> None:
         credit = self._compute_initial_credit()
@@ -1032,6 +1038,8 @@ class PlantManager(DeltaManager):
         self.dev_savings: dict[str, float] = {k: 0.0 for k in self.prod_keys + self.sto_keys}
         self.dev_initial: dict[str, float] = dict(self.dev_savings)
         self.last_inv: dict[str, float] = {}
+        # bereits verbuchter Startwert (€) je Gerät; Änderungen/neue Geräte buchen die Differenz
+        self.applied_flat: dict[str, float] = {}
         self.views: dict[str, DeviceView] = {
             k: DeviceView(self, k) for k in self.prod_keys + self.sto_keys
         }
@@ -1146,6 +1154,7 @@ class PlantManager(DeltaManager):
                 self.dev_initial[key] += flat
                 self.dev_savings[key] += flat
                 device_flat += flat
+            self.applied_flat[key] = flat
         self.credit_breakdown = {
             "zaehlerstaende_eur": round(auto, 2),
             "geraete_pauschal_eur": round(device_flat, 2),
@@ -1154,12 +1163,45 @@ class PlantManager(DeltaManager):
         return euro + auto + device_flat
 
     # ------------------------------------------------------------------ Persistenz
+    def _flat(self, key: str) -> float:
+        return float(self._spec(key).get("initial_savings", 0) or 0)
+
     def _restore_counters(self, data: dict) -> None:
+        # Wurde der Sensor eines Geräts ausgetauscht, den bisherigen Zählerstand (Summe)
+        # übernehmen; der neue Sensor wird beim ersten Lesen neu gesetzt (raw_last None).
+        saved_groups = {k: dict(v) for k, v in data.get("groups", {}).items()}
+        for key, group in self.groups.items():
+            saved = saved_groups.get(key)
+            if saved and set(saved) != set(group) and len(saved) == 1 and len(group) == 1:
+                _raw, total = next(iter(saved.values()))
+                saved_groups[key] = {next(iter(group)): [None, total]}
+        data = {**data, "groups": saved_groups}
         super()._restore_counters(data)
+        saved_savings = data.get("dev_savings", {})
         for key in self.dev_savings:
-            self.dev_savings[key] = data.get("dev_savings", {}).get(key, 0.0)
+            self.dev_savings[key] = saved_savings.get(key, 0.0)
             self.dev_initial[key] = data.get("dev_initial", {}).get(key, 0.0)
         self.last_inv = dict(data.get("last_inv", {}))
+        if "applied_flat" in data:
+            self.applied_flat = dict(data["applied_flat"])
+        else:
+            # Bestandseinträge (vor dieser Funktion): vorhandene Startwerte gelten als verbucht
+            self.applied_flat = {k: self._flat(k) for k in self.dev_savings if k in saved_savings}
+
+    def _after_restore(self) -> None:
+        """Geänderte/neu hinzugefügte Startwerte je Gerät als Differenz nachbuchen."""
+        changed = False
+        for key in self.dev_savings:
+            diff = self._flat(key) - self.applied_flat.get(key, 0.0)
+            if diff:
+                self.dev_savings[key] += diff
+                self.dev_initial[key] += diff
+                self.total_savings += diff
+                self.initial_credit += diff
+                self.applied_flat[key] = self._flat(key)
+                changed = True
+        if changed:
+            self._schedule_save()
 
     def _extra_save(self) -> dict:
         data = super()._extra_save()
@@ -1167,6 +1209,7 @@ class PlantManager(DeltaManager):
             dev_savings=dict(self.dev_savings),
             dev_initial=dict(self.dev_initial),
             last_inv=dict(self.last_inv),
+            applied_flat=dict(self.applied_flat),
         )
         return data
 

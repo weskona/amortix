@@ -265,3 +265,93 @@ def test_overview_start_time_is_earliest_entry():
     over.entry.entry_id = "over"
     over.hass.data = {c.DOMAIN: {"a": a, "b": b, "over": over}}
     assert over.start_time == "2026-03-01T00:00:00+00:00"
+
+
+# ---------------------------------------------------------------- Nachtraegliche Aenderungen
+RUNNING = {**STATES, "sensor.pv": 0, "sensor.bkw1": 0, "sensor.bkw2": 0, "sensor.grid": 0, "sensor.dc_c": 0, "sensor.dc_d": 0}
+
+
+def running_plant(cfg=None, states=None):
+    m = make(PlantManager, cfg or PLANT_CFG, dict(states or RUNNING))
+    start(m)
+    fill(m, pv=80, b1=10, b2=10, export=30, chg=20, dis=16)
+    m._async_evaluate()
+    return m
+
+
+def test_ac_storage_added_later_starts_counting_from_now_with_its_flat_value():
+    before = running_plant()
+    saved = before._data_to_save()
+    cfg = {
+        **PLANT_CFG,
+        c.CONF_STORAGES: PLANT_CFG[c.CONF_STORAGES]
+        + [{"name": "AC-Speicher", "charge_sensor": "sensor.ac_c", "discharge_sensor": "sensor.ac_d", "initial_savings": 200}],
+    }
+    states = {**RUNNING, "sensor.ac_c": 500, "sensor.ac_d": 450}   # Zaehler hat eigene Historie
+    after = restart(PlantManager, cfg, states, saved)
+
+    assert after.total_savings == pytest.approx(before.total_savings + 200)
+    assert after.dev_savings["sto1"] == pytest.approx(200)
+    assert after.views["sto1"].initial_credit == pytest.approx(200)
+    assert after.dev_savings["prod0"] == pytest.approx(before.dev_savings["prod0"])   # bestehende Geraete unveraendert
+    after._async_evaluate()                      # Historie des neuen Zaehlers wird nicht nachgebucht
+    assert after.total_savings == pytest.approx(before.total_savings + 200)
+    # ab jetzt zaehlt der neue Speicher
+    put(after, "chg1", 10.0)
+    put(after, "dis1", 8.0)
+    after._async_evaluate()
+    assert after.dev_savings["sto1"] == pytest.approx(200 + 8 * 0.30 - 10 * 0.08)
+
+
+def test_changed_flat_value_books_only_the_difference_once():
+    before = running_plant(
+        {**PLANT_CFG, c.CONF_DEVICES: [{**PLANT_CFG[c.CONF_DEVICES][0], "initial_savings": 1000}, *PLANT_CFG[c.CONF_DEVICES][1:]]}
+    )
+    start_total = before.total_savings
+    cfg = {**PLANT_CFG, c.CONF_DEVICES: [{**PLANT_CFG[c.CONF_DEVICES][0], "initial_savings": 1500}, *PLANT_CFG[c.CONF_DEVICES][1:]]}
+    again = restart(PlantManager, cfg, RUNNING, before._data_to_save())
+    assert again.total_savings == pytest.approx(start_total + 500)
+    assert again.dev_initial["prod0"] == pytest.approx(before.dev_initial["prod0"] + 500)
+    third = restart(PlantManager, cfg, RUNNING, again._data_to_save())
+    assert third.total_savings == pytest.approx(again.total_savings)      # nicht erneut gebucht
+
+
+def test_flat_value_lowered_reduces_savings():
+    cfg_hi = {**PLANT_CFG, c.CONF_DEVICES: [{**PLANT_CFG[c.CONF_DEVICES][0], "initial_savings": 1000}, *PLANT_CFG[c.CONF_DEVICES][1:]]}
+    before = running_plant(cfg_hi)
+    cfg_lo = {**PLANT_CFG, c.CONF_DEVICES: [{**PLANT_CFG[c.CONF_DEVICES][0], "initial_savings": 400}, *PLANT_CFG[c.CONF_DEVICES][1:]]}
+    again = restart(PlantManager, cfg_lo, RUNNING, before._data_to_save())
+    assert again.total_savings == pytest.approx(before.total_savings - 600)
+
+
+def test_existing_entries_without_applied_flat_do_not_double_book():
+    cfg = {**PLANT_CFG, c.CONF_DEVICES: [{**PLANT_CFG[c.CONF_DEVICES][0], "initial_savings": 1000}, *PLANT_CFG[c.CONF_DEVICES][1:]]}
+    before = running_plant(cfg)
+    saved = before._data_to_save()
+    saved.pop("applied_flat")                      # Stand vor dieser Funktion
+    again = restart(PlantManager, cfg, RUNNING, saved)
+    assert again.total_savings == pytest.approx(before.total_savings)
+
+
+def test_replaced_sensor_keeps_history_and_counts_on_from_the_new_meter():
+    before = running_plant()
+    saved = before._data_to_save()
+    devices = [{**PLANT_CFG[c.CONF_DEVICES][0], "sensor": "sensor.pv_new"}, *PLANT_CFG[c.CONF_DEVICES][1:]]
+    cfg = {**PLANT_CFG, c.CONF_DEVICES: devices, c.CONF_PRODUCTION_SENSOR: ["sensor.pv_new", "sensor.bkw1", "sensor.bkw2"]}
+    states = {**RUNNING, "sensor.pv_new": 3}       # neuer Wechselrichter, Zaehler bei 3 kWh
+    after = restart(PlantManager, cfg, states, saved)
+    assert after.total("prod0") == pytest.approx(before.total("prod0"))
+    after._async_evaluate()
+    assert after.total_savings == pytest.approx(before.total_savings)      # nichts doppelt
+    next(iter(after.groups["prod0"].values())).update(8)                   # +5 kWh neuer Zaehler
+    after._async_evaluate()
+    assert after.total_savings > before.total_savings
+
+
+def test_replaced_export_sensor_keeps_history():
+    before = running_plant()
+    cfg = {**PLANT_CFG, c.CONF_TO_GRID_SENSOR: "sensor.grid_new"}
+    after = restart(PlantManager, cfg, {**RUNNING, "sensor.grid_new": 12}, before._data_to_save())
+    assert after.total("export") == pytest.approx(before.total("export"))
+    after._async_evaluate()
+    assert after.total_savings == pytest.approx(before.total_savings)

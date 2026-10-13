@@ -82,11 +82,25 @@ _ENERGY_KEYS = (
     CONF_ENERGY_SENSOR,
     CONF_HEAT_SENSOR,
     CONF_ELECTRIC_SENSOR,
+    "sensor",  # Erzeuger-Sensor beim nachträglichen Hinzufügen/Bearbeiten
 )
 
 
 def _non_kwh_entity(hass, user_input: dict[str, Any]) -> str | None:
     return non_kwh_entity(hass, user_input, _ENERGY_KEYS)
+
+
+def _plant_used_sensors(data: dict[str, Any], exclude: Any = None, exclude_export: bool = False) -> set[str]:
+    """Alle in einer Anlage bereits belegten Energie-Sensoren (optional ohne bestimmte)."""
+    used: set[str] = set()
+    if not exclude_export and data.get(CONF_TO_GRID_SENSOR):
+        used.add(data[CONF_TO_GRID_SENSOR])
+    used.update(d["sensor"] for d in data.get(CONF_DEVICES, []))
+    for st in data.get(CONF_STORAGES, []):
+        used.update((st[CONF_CHARGE_SENSOR], st[CONF_DISCHARGE_SENSOR]))
+    if exclude:
+        used -= {exclude} if isinstance(exclude, str) else set(exclude)
+    return used
 
 
 def _economics_schema(d: dict[str, Any]) -> dict:
@@ -476,7 +490,7 @@ class AmortizationOptionsFlow(OptionsFlow):
         if mode == MODE_OVERVIEW:
             return self.async_abort(reason="no_options")
         if mode == MODE_PLANT:
-            return await self.async_step_plant(user_input)
+            return await self.async_step_plant_menu()
         if user_input is not None:
             # Vollstaendig aufgeloest in entry.data schreiben statt in
             # entry.options: {**data, **options} in BaseManager.config wuerde
@@ -504,8 +518,18 @@ class AmortizationOptionsFlow(OptionsFlow):
         devices = [dict(d) for d in data.get(CONF_DEVICES, [])]
         storages = [dict(st) for st in data.get(CONF_STORAGES, [])]
 
-        if user_input is not None:
+        errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
+        if user_input is not None and (bad := non_kwh_entity(self.hass, user_input, _ENERGY_KEYS)):
+            errors["base"] = "not_kwh"
+            placeholders["entity"] = bad
+        elif user_input is not None and user_input[CONF_TO_GRID_SENSOR] in _plant_used_sensors(
+            data, exclude_export=True
+        ):
+            errors["base"] = "same_sensor"
+        elif user_input is not None:
             new_data = {**self.config_entry.data}
+            new_data[CONF_TO_GRID_SENSOR] = user_input[CONF_TO_GRID_SENSOR]
             new_data[CONF_PRICE_ENTITY] = user_input[CONF_PRICE_ENTITY]
             new_data.pop(CONF_FEED_IN_ENTITY, None)
             if user_input.get(CONF_FEED_IN_ENTITY):
@@ -522,6 +546,7 @@ class AmortizationOptionsFlow(OptionsFlow):
             return self.async_create_entry(title="", data={})
 
         fields: dict = {
+            vol.Required(CONF_TO_GRID_SENSOR, description={"suggested_value": data.get(CONF_TO_GRID_SENSOR)}): ENERGY_SENSOR,
             vol.Required(CONF_PRICE_ENTITY, description={"suggested_value": data.get(CONF_PRICE_ENTITY)}): VALUE_ENTITY,
             vol.Optional(CONF_FEED_IN_ENTITY, description={"suggested_value": data.get(CONF_FEED_IN_ENTITY)}): VALUE_ENTITY,
         }
@@ -533,5 +558,221 @@ class AmortizationOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="plant",
             data_schema=vol.Schema(fields),
-            description_placeholders={"devices": "; ".join(names)},
+            errors=errors,
+            description_placeholders={**placeholders, "devices": "; ".join(names)},
+        )
+
+    # ------------------------------------------------------------------
+    # Anlage nachträglich erweitern / ändern
+    # ------------------------------------------------------------------
+    _edit_key: str | None = None
+
+    async def async_step_plant_menu(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        return self.async_show_menu(
+            step_id="plant_menu",
+            menu_options=["plant", "plant_add_producer", "plant_add_storage", "plant_edit"],
+        )
+
+    def _save_plant(self, data: dict[str, Any]) -> ConfigFlowResult:
+        self.hass.config_entries.async_update_entry(self.config_entry, data=data)
+        return self.async_create_entry(title="", data={})
+
+    def _plant_data(self) -> dict[str, Any]:
+        data = {**self.config_entry.data, **self.config_entry.options}
+        data[CONF_DEVICES] = [dict(d) for d in data.get(CONF_DEVICES, [])]
+        data[CONF_STORAGES] = [dict(st) for st in data.get(CONF_STORAGES, [])]
+        return data
+
+    async def async_step_plant_add_producer(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
+        data = self._plant_data()
+        if user_input is not None and (bad := non_kwh_entity(self.hass, user_input, _ENERGY_KEYS)):
+            errors["base"] = "not_kwh"
+            placeholders["entity"] = bad
+        elif user_input is not None and user_input["sensor"] in _plant_used_sensors(data):
+            errors["base"] = "same_sensor"
+        elif user_input is not None:
+            device = {
+                "sensor": user_input["sensor"],
+                "name": user_input[CONF_NAME],
+                "initial_savings": user_input.get(CONF_INITIAL_SAVINGS, 0),
+            }
+            if user_input.get(CONF_INVESTMENT_ENTITY):
+                device[CONF_INVESTMENT_ENTITY] = user_input[CONF_INVESTMENT_ENTITY]
+            data[CONF_DEVICES].append(device)
+            data[CONF_PRODUCTION_SENSOR] = [d["sensor"] for d in data[CONF_DEVICES]]
+            return self._save_plant(data)
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME, default="Erzeuger"): selector.TextSelector(),
+                vol.Required("sensor"): ENERGY_SENSOR,
+                vol.Optional(CONF_INVESTMENT_ENTITY): VALUE_ENTITY,
+                vol.Optional(CONF_INITIAL_SAVINGS, default=0): EURO,
+            }
+        )
+        return self.async_show_form(
+            step_id="plant_add_producer",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders=placeholders,
+        )
+
+    async def async_step_plant_add_storage(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
+        data = self._plant_data()
+        if user_input is not None and (bad := non_kwh_entity(self.hass, user_input, _ENERGY_KEYS)):
+            errors["base"] = "not_kwh"
+            placeholders["entity"] = bad
+        elif user_input is not None and (
+            user_input[CONF_CHARGE_SENSOR] == user_input[CONF_DISCHARGE_SENSOR]
+            or {user_input[CONF_CHARGE_SENSOR], user_input[CONF_DISCHARGE_SENSOR]}
+            & _plant_used_sensors(data)
+        ):
+            errors["base"] = "same_sensor"
+        elif user_input is not None:
+            storage = {
+                "name": user_input[CONF_NAME],
+                CONF_CHARGE_SENSOR: user_input[CONF_CHARGE_SENSOR],
+                CONF_DISCHARGE_SENSOR: user_input[CONF_DISCHARGE_SENSOR],
+                "initial_savings": user_input.get(CONF_INITIAL_SAVINGS, 0),
+            }
+            if user_input.get(CONF_INVESTMENT_ENTITY):
+                storage[CONF_INVESTMENT_ENTITY] = user_input[CONF_INVESTMENT_ENTITY]
+            data[CONF_STORAGES].append(storage)
+            return self._save_plant(data)
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME, default="Speicher"): selector.TextSelector(),
+                vol.Required(CONF_CHARGE_SENSOR): ENERGY_SENSOR,
+                vol.Required(CONF_DISCHARGE_SENSOR): ENERGY_SENSOR,
+                vol.Optional(CONF_INVESTMENT_ENTITY): VALUE_ENTITY,
+                vol.Optional(CONF_INITIAL_SAVINGS, default=0): EURO,
+            }
+        )
+        return self.async_show_form(
+            step_id="plant_add_storage",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders=placeholders,
+        )
+
+    async def async_step_plant_edit(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Gerät zum Bearbeiten auswählen."""
+        data = self._plant_data()
+        if user_input is not None:
+            self._edit_key = user_input["device"]
+            if self._edit_key.startswith("prod"):
+                return await self.async_step_plant_edit_producer()
+            return await self.async_step_plant_edit_storage()
+
+        options = [
+            selector.SelectOptionDict(value=f"prod{i}", label=d.get("name") or d["sensor"])
+            for i, d in enumerate(data[CONF_DEVICES])
+        ] + [
+            selector.SelectOptionDict(value=f"sto{j}", label=st.get("name") or f"Speicher {j + 1}")
+            for j, st in enumerate(data[CONF_STORAGES])
+        ]
+        schema = vol.Schema(
+            {
+                vol.Required("device"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=options, mode=selector.SelectSelectorMode.LIST)
+                )
+            }
+        )
+        return self.async_show_form(step_id="plant_edit", data_schema=schema)
+
+    async def async_step_plant_edit_producer(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
+        data = self._plant_data()
+        index = int(self._edit_key[4:])
+        device = data[CONF_DEVICES][index]
+        if user_input is not None and (bad := non_kwh_entity(self.hass, user_input, _ENERGY_KEYS)):
+            errors["base"] = "not_kwh"
+            placeholders["entity"] = bad
+        elif user_input is not None and user_input["sensor"] in _plant_used_sensors(
+            data, exclude=device["sensor"]
+        ):
+            errors["base"] = "same_sensor"
+        elif user_input is not None:
+            device["name"] = user_input[CONF_NAME]
+            device["sensor"] = user_input["sensor"]
+            device["initial_savings"] = user_input.get(CONF_INITIAL_SAVINGS, 0)
+            device.pop(CONF_INVESTMENT_ENTITY, None)
+            if user_input.get(CONF_INVESTMENT_ENTITY):
+                device[CONF_INVESTMENT_ENTITY] = user_input[CONF_INVESTMENT_ENTITY]
+            data[CONF_PRODUCTION_SENSOR] = [d["sensor"] for d in data[CONF_DEVICES]]
+            return self._save_plant(data)
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME, description={"suggested_value": device.get("name")}): selector.TextSelector(),
+                vol.Required("sensor", description={"suggested_value": device["sensor"]}): ENERGY_SENSOR,
+                vol.Optional(CONF_INVESTMENT_ENTITY, description={"suggested_value": device.get(CONF_INVESTMENT_ENTITY)}): VALUE_ENTITY,
+                vol.Optional(CONF_INITIAL_SAVINGS, description={"suggested_value": device.get("initial_savings", 0)}): EURO,
+            }
+        )
+        return self.async_show_form(
+            step_id="plant_edit_producer",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders=placeholders,
+        )
+
+    async def async_step_plant_edit_storage(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
+        data = self._plant_data()
+        index = int(self._edit_key[3:])
+        storage = data[CONF_STORAGES][index]
+        own = {storage[CONF_CHARGE_SENSOR], storage[CONF_DISCHARGE_SENSOR]}
+        if user_input is not None and (bad := non_kwh_entity(self.hass, user_input, _ENERGY_KEYS)):
+            errors["base"] = "not_kwh"
+            placeholders["entity"] = bad
+        elif user_input is not None and (
+            user_input[CONF_CHARGE_SENSOR] == user_input[CONF_DISCHARGE_SENSOR]
+            or {user_input[CONF_CHARGE_SENSOR], user_input[CONF_DISCHARGE_SENSOR]}
+            & _plant_used_sensors(data, exclude=own)
+        ):
+            errors["base"] = "same_sensor"
+        elif user_input is not None:
+            storage["name"] = user_input[CONF_NAME]
+            storage[CONF_CHARGE_SENSOR] = user_input[CONF_CHARGE_SENSOR]
+            storage[CONF_DISCHARGE_SENSOR] = user_input[CONF_DISCHARGE_SENSOR]
+            storage["initial_savings"] = user_input.get(CONF_INITIAL_SAVINGS, 0)
+            storage.pop(CONF_INVESTMENT_ENTITY, None)
+            if user_input.get(CONF_INVESTMENT_ENTITY):
+                storage[CONF_INVESTMENT_ENTITY] = user_input[CONF_INVESTMENT_ENTITY]
+            return self._save_plant(data)
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME, description={"suggested_value": storage.get("name")}): selector.TextSelector(),
+                vol.Required(CONF_CHARGE_SENSOR, description={"suggested_value": storage[CONF_CHARGE_SENSOR]}): ENERGY_SENSOR,
+                vol.Required(CONF_DISCHARGE_SENSOR, description={"suggested_value": storage[CONF_DISCHARGE_SENSOR]}): ENERGY_SENSOR,
+                vol.Optional(CONF_INVESTMENT_ENTITY, description={"suggested_value": storage.get(CONF_INVESTMENT_ENTITY)}): VALUE_ENTITY,
+                vol.Optional(CONF_INITIAL_SAVINGS, description={"suggested_value": storage.get("initial_savings", 0)}): EURO,
+            }
+        )
+        return self.async_show_form(
+            step_id="plant_edit_storage",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders=placeholders,
         )

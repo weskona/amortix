@@ -85,6 +85,13 @@ Every device gets its own *Einsparung*, *Amortisation Fortschritt*, *verbleibend
 
 **Starting values for systems that are already running:** enter the savings accrued so far per device (a euro amount per producer/storage). Additionally, the entry can compute a starting credit automatically from the current meter readings (split across the devices like above) and/or take a flat amount. Don't use the automatic credit and a per-device amount for the same energy.
 
+**Changing a system later** (**Configure** on the entry):
+- **Add producer / Add storage** — e.g. a third balcony plant or the AC storage you buy next year. The new device counts from now on, the existing history stays untouched, and its starting value (€) is credited once.
+- **Edit device** — change name, cost entity, starting value or the sensors of an existing device. When a sensor is replaced (e.g. a new inverter), the existing total is kept and the new sensor continues from its first reading. When the starting value changes, only the difference is booked.
+- **Prices, costs and export** — grid price, feed-in tariff, the export sensor and the cost entities.
+
+Devices cannot be removed; leave the cost empty or ignore them if they are no longer needed.
+
 ### Overview
 
 Add the **Overview** once to combine **all other Amortix entries**: *Einsparung gesamt* (total savings), *Investition gesamt*, progress, remaining amount, savings per day, remaining time and payback date. The sensor *Einsparung gesamt* carries the full breakdown in its attribute `geraete`: a list with name, type, investment, savings, progress and remaining amount for every device (and one line for flat starting credits). New entries are included automatically.
@@ -95,7 +102,7 @@ Requirements for all sensors:
 - Must report **kWh**. Setup rejects sensors with another unit (Wh, MWh, …) because they would be off by a factor of 1000; convert them first (template or utility meter).
 - Export/charge/discharge as the actual meter register — not a signed/net value, not per-phase.
 
-**Investment cost, grid price, and feed-in tariff can be changed later** without losing history: **Settings → Devices & Services → Amortix → Configure**. The production/export/charge/discharge sensors and the starting credit are fixed at setup and not editable afterward (they define the accounting baseline).
+**Investment cost, grid price, and feed-in tariff can be changed later** without losing history: **Settings → Devices & Services → Amortix → Configure**. In the other modes the production/export/charge/discharge sensors and the starting credit are fixed at setup (they define the accounting baseline). The **System** mode can be extended and changed afterwards, see below.
 
 ---
 

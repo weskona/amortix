@@ -85,6 +85,13 @@ Jedes Gerät bekommt eigene Sensoren *Einsparung*, *Amortisation Fortschritt*, *
 
 **Startwerte bei bereits laufenden Anlagen:** Gib je Gerät die bisher aufgelaufene Ersparnis als Euro-Betrag an (je Erzeuger/Speicher). Zusätzlich kann der Eintrag eine Startgutschrift automatisch aus den aktuellen Zählerständen berechnen (aufgeteilt auf die Geräte wie oben) und/oder einen Pauschalbetrag aufnehmen. Die automatische Gutschrift und einen Betrag je Gerät nicht für dieselbe Energie verwenden.
 
+**Anlage nachträglich ändern** (**Konfigurieren** am Eintrag):
+- **Erzeuger / Speicher hinzufügen** — z. B. ein drittes Balkonkraftwerk oder der AC-Speicher, den du nächstes Jahr kaufst. Das neue Gerät zählt ab jetzt, die bisherige Historie bleibt unangetastet, und sein Startwert (€) wird einmalig gutgeschrieben.
+- **Gerät bearbeiten** — Name, Kosten-Entität, Startwert oder die Sensoren eines bestehenden Geräts ändern. Wird ein Sensor ausgetauscht (z. B. neuer Wechselrichter), bleibt die bisherige Summe erhalten und der neue Sensor zählt ab dem ersten Lesen weiter. Ändert sich der Startwert, wird nur die Differenz verbucht.
+- **Preise, Kosten und Einspeisung** — Strompreis, Vergütung, Einspeise-Sensor und die Kosten-Entitäten.
+
+Geräte lassen sich nicht entfernen; die Kosten leer lassen oder das Gerät ignorieren, wenn es nicht mehr gebraucht wird.
+
 ### Gesamtübersicht
 
 Die **Gesamtübersicht** einmal anlegen, um **alle anderen Amortix-Einträge** zusammenzufassen: *Einsparung gesamt*, *Investition gesamt*, Fortschritt, Restbetrag, Ersparnis pro Tag, Restzeit und Datum. Der Sensor *Einsparung gesamt* trägt den vollständigen Breakdown im Attribut `geraete`: eine Liste mit Name, Typ, Investition, Ersparnis, Fortschritt und Restbetrag für jedes Gerät (und eine Zeile für pauschale Startgutschriften). Neue Einträge werden automatisch einbezogen.
@@ -95,7 +102,7 @@ Anforderungen an alle Sensoren:
 - Müssen **kWh** liefern. Die Einrichtung lehnt Sensoren mit anderer Einheit (Wh, MWh, …) ab, weil sie um den Faktor 1000 falsch rechnen würden; vorher umrechnen (Template oder Utility-Meter).
 - Einspeisung/Ladung/Entladung als tatsächliches Zähler-Register — kein vorzeichenbehafteter/Saldo-Wert, keine Phasenwerte.
 
-**Anschaffungskosten, Strompreis und Einspeisevergütung lassen sich später ändern**, ohne die Historie zu verlieren: **Einstellungen → Geräte & Dienste → Amortix → Konfigurieren**. Die Erzeugungs-/Einspeisungs-/Lade-/Entlade-Sensoren und die Startgutschrift sind bei der Einrichtung fix und danach nicht mehr editierbar (sie legen die Rechnungsgrundlage fest).
+**Anschaffungskosten, Strompreis und Einspeisevergütung lassen sich später ändern**, ohne die Historie zu verlieren: **Einstellungen → Geräte & Dienste → Amortix → Konfigurieren**. In den anderen Modi sind die Erzeugungs-/Einspeisungs-/Lade-/Entlade-Sensoren und die Startgutschrift bei der Einrichtung fix (sie legen die Rechnungsgrundlage fest). Der Modus **Anlage** lässt sich nachträglich erweitern und ändern, siehe unten.
 
 ---
 

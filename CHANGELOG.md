@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **System** mode can be changed afterwards via **Configure**: add producers and storage units (e.g. an AC storage later), edit name, cost entity, starting value and sensors of existing devices, and change prices, costs and the export sensor. Replacing a sensor keeps the existing total; changing a starting value books only the difference; a device added later is credited with its starting value once.
+
 ## [1.3.1] - 2026-10-13
 
 ### Changed

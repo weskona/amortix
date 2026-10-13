@@ -267,7 +267,8 @@
           "storage_2_investment": "Cost of storage 2",
           "storage_3_investment": "Cost of storage 3",
           "storage_4_investment": "Cost of storage 4",
-          "storage_5_investment": "Cost of storage 5"
+          "storage_5_investment": "Cost of storage 5",
+          "to_grid_sensor": "Export / to_grid (for everything together)"
         },
         "data_description": {
           "price_entity": "Grid price in €/kWh – dynamic is fine.",
@@ -286,12 +287,104 @@
           "storage_2_investment": "Entity with the purchase cost of this storage in €. Empty = no cost.",
           "storage_3_investment": "Entity with the purchase cost of this storage in €. Empty = no cost.",
           "storage_4_investment": "Entity with the purchase cost of this storage in €. Empty = no cost.",
-          "storage_5_investment": "Entity with the purchase cost of this storage in €. Empty = no cost."
+          "storage_5_investment": "Entity with the purchase cost of this storage in €. Empty = no cost.",
+          "to_grid_sensor": "Cumulative kWh export at the grid connection point. When replaced, the existing total is kept and the new sensor continues counting from its first reading."
+        }
+      },
+      "plant_menu": {
+        "title": "Adjust system",
+        "menu_options": {
+          "plant": "Prices, costs and export",
+          "plant_add_producer": "Add producer (e.g. another balcony plant)",
+          "plant_add_storage": "Add storage (e.g. AC storage)",
+          "plant_edit": "Edit device (name, sensors, cost, starting value)"
+        }
+      },
+      "plant_add_producer": {
+        "title": "Add producer",
+        "description": "The new device counts from now on; the existing history of the system stays unchanged. The starting value is the amount (€) already saved with this device and is credited once.",
+        "data": {
+          "name": "Name",
+          "sensor": "Production (kWh, cumulative)",
+          "investment_entity": "Purchase cost (optional)",
+          "initial_savings": "Starting value: savings so far (€)"
+        },
+        "data_description": {
+          "name": "Free choice, e.g. 'Balcony 3'.",
+          "sensor": "Cumulative kWh production counter of this device.",
+          "investment_entity": "Entity with the cost in €. Empty = no progress for this device.",
+          "initial_savings": "Optional. Amount saved with this device so far, in €."
+        }
+      },
+      "plant_add_storage": {
+        "title": "Add storage",
+        "description": "The new storage (DC or AC) counts from now on; the existing history of the system stays unchanged. The starting value is credited once. The storage must not be part of the production sensors.",
+        "data": {
+          "name": "Name",
+          "charge_sensor": "Charge (kWh, cumulative)",
+          "discharge_sensor": "Discharge (kWh, cumulative)",
+          "investment_entity": "Purchase cost (optional)",
+          "initial_savings": "Starting value: savings so far (€)"
+        },
+        "data_description": {
+          "name": "Free choice, e.g. 'AC storage'.",
+          "charge_sensor": "Cumulative kWh counter of battery charging.",
+          "discharge_sensor": "Cumulative kWh counter of battery discharging.",
+          "investment_entity": "Entity with the cost in €. Empty = no progress for this storage.",
+          "initial_savings": "Optional. Amount saved with this storage so far, in €."
+        }
+      },
+      "plant_edit": {
+        "title": "Edit device",
+        "description": "Which device do you want to edit?",
+        "data": {
+          "device": "Device"
+        },
+        "data_description": {
+          "device": "The existing meter total and savings are kept when editing."
+        }
+      },
+      "plant_edit_producer": {
+        "title": "Edit producer",
+        "description": "If the sensor is replaced (e.g. after swapping the device), the existing total is kept and the new sensor continues counting from its first reading. If the starting value changes, only the difference is credited or deducted.",
+        "data": {
+          "name": "Name",
+          "sensor": "Production (kWh, cumulative)",
+          "investment_entity": "Purchase cost (optional)",
+          "initial_savings": "Starting value: savings so far (€)"
+        },
+        "data_description": {
+          "name": "Free choice.",
+          "sensor": "Cumulative kWh production counter of this device.",
+          "investment_entity": "Entity with the cost in €. Empty = no progress.",
+          "initial_savings": "On change only the difference to the previous starting value is booked."
+        }
+      },
+      "plant_edit_storage": {
+        "title": "Edit storage",
+        "description": "If a sensor is replaced, the existing total is kept and the new sensor continues counting from its first reading. If the starting value changes, only the difference is credited or deducted.",
+        "data": {
+          "name": "Name",
+          "charge_sensor": "Charge (kWh, cumulative)",
+          "discharge_sensor": "Discharge (kWh, cumulative)",
+          "investment_entity": "Purchase cost (optional)",
+          "initial_savings": "Starting value: savings so far (€)"
+        },
+        "data_description": {
+          "name": "Free choice.",
+          "charge_sensor": "Cumulative kWh counter of battery charging.",
+          "discharge_sensor": "Cumulative kWh counter of battery discharging.",
+          "investment_entity": "Entity with the cost in €. Empty = no progress.",
+          "initial_savings": "On change only the difference to the previous starting value is booked."
         }
       }
     },
     "abort": {
       "no_options": "The overview has no settings."
+    },
+    "error": {
+      "same_sensor": "Every sensor may only be chosen once (e.g. export must not be among the production sensors).",
+      "not_kwh": "The sensor {entity} does not report kWh. Please choose an energy sensor with the unit kWh (convert Wh/MWh sensors to kWh first, e.g. with a template or utility meter)."
     }
   }
 }

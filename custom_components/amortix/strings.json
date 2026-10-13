@@ -267,7 +267,8 @@
           "storage_2_investment": "Kosten Speicher 2",
           "storage_3_investment": "Kosten Speicher 3",
           "storage_4_investment": "Kosten Speicher 4",
-          "storage_5_investment": "Kosten Speicher 5"
+          "storage_5_investment": "Kosten Speicher 5",
+          "to_grid_sensor": "Einspeisung / to_grid (für alles zusammen)"
         },
         "data_description": {
           "price_entity": "Netzbezugspreis in €/kWh – auch dynamisch.",
@@ -286,12 +287,104 @@
           "storage_2_investment": "Entität mit den Anschaffungskosten dieses Speichers in €. Leer = keine Kosten.",
           "storage_3_investment": "Entität mit den Anschaffungskosten dieses Speichers in €. Leer = keine Kosten.",
           "storage_4_investment": "Entität mit den Anschaffungskosten dieses Speichers in €. Leer = keine Kosten.",
-          "storage_5_investment": "Entität mit den Anschaffungskosten dieses Speichers in €. Leer = keine Kosten."
+          "storage_5_investment": "Entität mit den Anschaffungskosten dieses Speichers in €. Leer = keine Kosten.",
+          "to_grid_sensor": "Kumulierende kWh-Einspeisung am Netzübergabepunkt. Bei einem Austausch bleibt der bisherige Zählerstand erhalten, der neue Sensor zählt ab dem ersten Lesen weiter."
+        }
+      },
+      "plant_menu": {
+        "title": "Anlage anpassen",
+        "menu_options": {
+          "plant": "Preise, Kosten und Einspeisung",
+          "plant_add_producer": "Erzeuger hinzufügen (z. B. weiteres BKW)",
+          "plant_add_storage": "Speicher hinzufügen (z. B. AC-Speicher)",
+          "plant_edit": "Gerät bearbeiten (Name, Sensoren, Kosten, Startwert)"
+        }
+      },
+      "plant_add_producer": {
+        "title": "Erzeuger hinzufügen",
+        "description": "Das neue Gerät zählt ab jetzt; die bisherige Historie der Anlage bleibt unverändert. Der Startwert ist die mit diesem Gerät bereits eingesparte Summe (€) und wird einmalig gutgeschrieben.",
+        "data": {
+          "name": "Name",
+          "sensor": "Erzeugung (kWh, kumulierend)",
+          "investment_entity": "Anschaffungskosten (optional)",
+          "initial_savings": "Startwert: bisherige Ersparnis (€)"
+        },
+        "data_description": {
+          "name": "Frei wählbar, z. B. 'BKW 3'.",
+          "sensor": "Kumulierender kWh-Zähler der Erzeugung dieses Geräts.",
+          "investment_entity": "Entität mit den Kosten in €. Leer = kein Fortschritt für dieses Gerät.",
+          "initial_savings": "Optional. Bisher mit diesem Gerät eingesparter Betrag in €."
+        }
+      },
+      "plant_add_storage": {
+        "title": "Speicher hinzufügen",
+        "description": "Der neue Speicher (DC oder AC) zählt ab jetzt; die bisherige Historie der Anlage bleibt unverändert. Der Startwert wird einmalig gutgeschrieben. Der Speicher darf nicht in den Erzeugungssensoren stecken.",
+        "data": {
+          "name": "Name",
+          "charge_sensor": "Ladung (kWh, kumulierend)",
+          "discharge_sensor": "Entladung (kWh, kumulierend)",
+          "investment_entity": "Anschaffungskosten (optional)",
+          "initial_savings": "Startwert: bisherige Ersparnis (€)"
+        },
+        "data_description": {
+          "name": "Frei wählbar, z. B. 'AC-Speicher'.",
+          "charge_sensor": "Kumulierender kWh-Zähler der Batterie-Ladung.",
+          "discharge_sensor": "Kumulierender kWh-Zähler der Batterie-Entladung.",
+          "investment_entity": "Entität mit den Kosten in €. Leer = kein Fortschritt für diesen Speicher.",
+          "initial_savings": "Optional. Bisher mit diesem Speicher eingesparter Betrag in €."
+        }
+      },
+      "plant_edit": {
+        "title": "Gerät bearbeiten",
+        "description": "Welches Gerät möchtest du bearbeiten?",
+        "data": {
+          "device": "Gerät"
+        },
+        "data_description": {
+          "device": "Der bisherige Zählerstand und die Ersparnis bleiben beim Bearbeiten erhalten."
+        }
+      },
+      "plant_edit_producer": {
+        "title": "Erzeuger bearbeiten",
+        "description": "Wird der Sensor ausgetauscht (z. B. nach einem Gerätewechsel), bleibt die bisherige Summe erhalten und der neue Sensor zählt ab dem ersten Lesen weiter. Ändert sich der Startwert, wird nur die Differenz gutgeschrieben bzw. abgezogen.",
+        "data": {
+          "name": "Name",
+          "sensor": "Erzeugung (kWh, kumulierend)",
+          "investment_entity": "Anschaffungskosten (optional)",
+          "initial_savings": "Startwert: bisherige Ersparnis (€)"
+        },
+        "data_description": {
+          "name": "Frei wählbar.",
+          "sensor": "Kumulierender kWh-Zähler der Erzeugung dieses Geräts.",
+          "investment_entity": "Entität mit den Kosten in €. Leer = kein Fortschritt.",
+          "initial_savings": "Bei einer Änderung wird nur die Differenz zum bisherigen Startwert verbucht."
+        }
+      },
+      "plant_edit_storage": {
+        "title": "Speicher bearbeiten",
+        "description": "Wird ein Sensor ausgetauscht, bleibt die bisherige Summe erhalten und der neue Sensor zählt ab dem ersten Lesen weiter. Ändert sich der Startwert, wird nur die Differenz gutgeschrieben bzw. abgezogen.",
+        "data": {
+          "name": "Name",
+          "charge_sensor": "Ladung (kWh, kumulierend)",
+          "discharge_sensor": "Entladung (kWh, kumulierend)",
+          "investment_entity": "Anschaffungskosten (optional)",
+          "initial_savings": "Startwert: bisherige Ersparnis (€)"
+        },
+        "data_description": {
+          "name": "Frei wählbar.",
+          "charge_sensor": "Kumulierender kWh-Zähler der Batterie-Ladung.",
+          "discharge_sensor": "Kumulierender kWh-Zähler der Batterie-Entladung.",
+          "investment_entity": "Entität mit den Kosten in €. Leer = kein Fortschritt.",
+          "initial_savings": "Bei einer Änderung wird nur die Differenz zum bisherigen Startwert verbucht."
         }
       }
     },
     "abort": {
       "no_options": "Die Gesamtübersicht hat keine Einstellungen."
+    },
+    "error": {
+      "same_sensor": "Jeder Sensor darf nur einmal gewählt werden (z. B. darf die Einspeisung nicht zu den Erzeugungssensoren gehören).",
+      "not_kwh": "Der Sensor {entity} liefert nicht kWh. Bitte einen Energie-Sensor mit der Einheit kWh wählen (Wh/MWh-Sensoren vorher per Template oder Utility-Meter in kWh umrechnen)."
     }
   }
 }
