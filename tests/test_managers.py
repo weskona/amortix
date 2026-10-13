@@ -230,3 +230,55 @@ def test_pending_flag_is_persisted():
     m = make(DirectManager, {**DIRECT_CFG, c.CONF_INITIAL_AUTO: True}, dict(RATES))
     start(m)
     assert m._data_to_save()["initial_pending"] is True
+
+
+def restart(manager_cls, cfg, states, saved):
+    """Neuen Manager mit dem gespeicherten Store-Inhalt starten (HA-Neustart)."""
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    m = make(manager_cls, cfg, states)
+    m.store.async_load = AsyncMock(return_value=saved)
+    asyncio.run(m.async_start())
+    return m
+
+
+def test_pending_credit_survives_restart_and_is_applied_once():
+    cfg = {**DIRECT_CFG, c.CONF_INITIAL_AUTO: True}
+
+    # 1. Erststart: Zaehler unavailable -> Gutschrift zurueckgestellt
+    first = make(DirectManager, cfg, dict(RATES))
+    start(first)
+    assert first.initial_pending
+    saved = first._data_to_save()
+
+    # 2. Neustart, Sensoren jetzt verfuegbar: Gutschrift wird nachgeholt
+    states = {**RATES, "sensor.prod": 200, "sensor.grid": 50}
+    second = restart(DirectManager, cfg, states, saved)
+    assert second.initial_pending                 # noch nicht angewendet
+    second._async_tick()
+    assert not second.initial_pending
+    expected = 150 * 0.30 + 50 * 0.08
+    assert second.initial_credit == pytest.approx(expected)
+    assert second.total_savings == pytest.approx(expected)
+
+    # 3. weiterer Neustart: Gutschrift wird nicht erneut berechnet/addiert
+    third = restart(DirectManager, cfg, states, second._data_to_save())
+    assert not third.initial_pending
+    third._async_tick()
+    assert third.initial_credit == pytest.approx(expected)
+    assert third.total_savings == pytest.approx(expected)
+
+
+def test_pending_storage_credit_survives_restart():
+    cfg = {**STORAGE_CFG, c.CONF_INITIAL_AUTO: True}
+    first = make(StorageManager, cfg, dict(RATES))
+    start(first)
+    saved = first._data_to_save()
+    assert saved["initial_pending"] is True
+
+    states = {**RATES, "sensor.chg": 120, "sensor.dis": 100}
+    second = restart(StorageManager, cfg, states, saved)
+    second._async_tick()
+    assert not second.initial_pending
+    assert second.initial_credit == pytest.approx(100 * 0.30 - 120 * 0.08)
