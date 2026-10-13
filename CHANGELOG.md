@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README (EN/DE): documentation of reset handling, the deferred starting credit and a new "Limitations" section (grid charging in storage mode is not priced, linear projection, negative prices, resets below 50 %, price units in €/kWh).
 
 ### Changed
+- README reworked to match the project's documentation standard.
 - Meter resets are now detected when the reading drops below 50 % of the last value (previously below 10 %), so resets to mid-range values are no longer missed. Smaller dips are ignored.
 - The storage-mode starting credit may now be negative so that it always equals the sum of its breakdown attributes.
 
@@ -24,8 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.2] - 2026-08-12
 
+### Changed
+- Release workflow commits the version bump of `manifest.json` back to `main`.
+
+## [1.0.1] - 2026-08-12
+
 ### Added
 - Brand assets for HACS brands validation.
+- `codeowners` in `manifest.json`.
+- `workflow_dispatch` trigger for the validate workflow.
+
+### Changed
+- Revised installation and use case sections in the README (EN/DE).
 
 ### Fixed
 - Options flow: a stale `feed_in_entity` was kept after changing the configuration.
@@ -47,5 +58,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [Unreleased]: https://github.com/weskona/amortix/compare/v1.1.0...HEAD
 [1.1.0]: https://github.com/weskona/amortix/compare/v1.0.2...v1.1.0
-[1.0.2]: https://github.com/weskona/amortix/compare/v1.0.0...v1.0.2
+[1.0.2]: https://github.com/weskona/amortix/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/weskona/amortix/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/weskona/amortix/releases/tag/v1.0.0
