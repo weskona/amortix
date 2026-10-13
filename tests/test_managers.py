@@ -13,7 +13,7 @@ def make(manager_cls, data, states):
     hass.states.get.side_effect = lambda eid: (
         SimpleNamespace(state=str(states[eid])) if eid in states else None
     )
-    entry = SimpleNamespace(entry_id="e1", data=data, options={})
+    entry = SimpleNamespace(entry_id="e1", title="Test", data=data, options={})
     return manager_cls(hass, entry)
 
 
@@ -151,3 +151,82 @@ def test_storage_initial_credit_matches_breakdown():
     assert credit == pytest.approx(
         parts["entladung_eur"] + parts["entgangene_einspeisung_eur"] + parts["pauschal_eur"]
     )
+
+
+# ----------------------------------------------------------------------
+# Startgutschrift wartet auf nicht verfuegbare Sensoren/Preise
+# ----------------------------------------------------------------------
+def start(manager):
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    manager.store.async_load = AsyncMock(return_value=None)
+    asyncio.run(manager.async_start())
+
+
+@pytest.fixture(autouse=True)
+def _no_ha_tracking(monkeypatch):
+    from custom_components.amortix import coordinator
+
+    monkeypatch.setattr(coordinator, "async_track_state_change_event", MagicMock())
+    monkeypatch.setattr(coordinator, "async_track_time_interval", MagicMock())
+
+
+def test_auto_credit_is_deferred_while_sensor_unavailable():
+    cfg = {**DIRECT_CFG, c.CONF_INITIAL_AUTO: True}
+    states = dict(RATES)                      # Zaehler unavailable (nicht in states)
+    m = make(DirectManager, cfg, states)
+    start(m)
+    assert m.initial_pending
+    assert m.total_savings == 0.0
+
+    # Sensoren werden lesbar: erster Wert seeded, danach Zuwachs
+    m.prod_counters["sensor.prod"].update(200.0)
+    m.grid.update(50.0)
+    m.prod_counters["sensor.prod"].update(201.0)
+    m._async_tick()
+    assert not m.initial_pending
+    assert m.initial_credit == pytest.approx(150 * 0.30 + 50 * 0.08)
+    # Zuwachs nach dem Seed ist nicht Teil der Startgutschrift, sondern normale Ersparnis
+    assert m.total_savings == pytest.approx(m.initial_credit + 1.0 * 0.30)
+
+
+def test_credit_is_deferred_while_price_unavailable():
+    cfg = {**DIRECT_CFG, c.CONF_INITIAL_SELF_KWH: 100}
+    states = {"input_number.inv": 1000, "input_number.feed": 0.08}  # kein Preis
+    m = make(DirectManager, cfg, states)
+    start(m)
+    assert m.initial_pending
+    states["input_number.price"] = 0.30
+    m._async_tick()
+    assert not m.initial_pending
+    assert m.initial_credit == pytest.approx(100 * 0.30)
+
+
+def test_credit_applied_immediately_when_everything_available():
+    cfg = {**DIRECT_CFG, c.CONF_INITIAL_AUTO: True}
+    states = {**RATES, "sensor.prod": 200, "sensor.grid": 50}
+    m = make(DirectManager, cfg, states)
+    start(m)
+    assert not m.initial_pending
+    assert m.initial_credit == pytest.approx(150 * 0.30 + 50 * 0.08)
+
+
+def test_storage_auto_credit_deferred_until_both_sensors_seeded():
+    cfg = {**STORAGE_CFG, c.CONF_INITIAL_AUTO: True}
+    m = make(StorageManager, cfg, dict(RATES))
+    start(m)
+    assert m.initial_pending
+    m.discharge.update(100.0)
+    m._async_tick()
+    assert m.initial_pending                  # Ladezaehler fehlt noch
+    m.charge.update(120.0)
+    m._async_tick()
+    assert not m.initial_pending
+    assert m.initial_credit == pytest.approx(100 * 0.30 - 120 * 0.08)
+
+
+def test_pending_flag_is_persisted():
+    m = make(DirectManager, {**DIRECT_CFG, c.CONF_INITIAL_AUTO: True}, dict(RATES))
+    start(m)
+    assert m._data_to_save()["initial_pending"] is True

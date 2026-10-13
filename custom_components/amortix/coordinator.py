@@ -71,6 +71,13 @@ class MonotonicCounter:
         self.raw_last = raw_last
         self.total = total
 
+    @property
+    def initial(self) -> float:
+        """Zählerstand beim ersten Lesen (0, solange der Zähler noch nie gelesen wurde)."""
+        if self.raw_last is None:
+            return 0.0
+        return max(self.raw_last - self.total, 0.0)
+
     def update(self, reading: float) -> None:
         if self.raw_last is None:
             self.raw_last = reading
@@ -123,6 +130,8 @@ class BaseManager:
         self.last_feed_in: float | None = None
         self.last_investment: float | None = None
         self.start_time: str | None = None
+        # Startgutschrift wartet noch auf Sensoren/Preise (beim ersten Start nicht verfügbar)
+        self.initial_pending: bool = False
 
         self._listeners: list[CALLBACK_TYPE] = []
         self._unsub_state: CALLBACK_TYPE | None = None
@@ -183,6 +192,7 @@ class BaseManager:
             self.last_feed_in = data.get("last_feed_in")
             self.last_investment = data.get("last_investment")
             self.start_time = data.get("start_time")
+            self.initial_pending = data.get("initial_pending", False)
             self._restore_counters(data)
 
         if not self.start_time:
@@ -193,16 +203,54 @@ class BaseManager:
             self._seed(entity_id, counter)
 
         if first_run:
-            self.initial_credit = self._compute_initial_credit()
-            self.total_savings = self.initial_credit
+            if self._initial_ready():
+                self._apply_initial_credit()
+            else:
+                # Sensoren/Preise sind noch nicht verfügbar: nicht still mit 0 starten,
+                # sondern die Startgutschrift nachholen, sobald alles lesbar ist.
+                self.initial_pending = True
+                _LOGGER.warning(
+                    "Amortix %s: Startgutschrift wird berechnet, sobald alle "
+                    "Sensoren und Preise verfügbar sind",
+                    self.entry.title,
+                )
 
         self._unsub_state = async_track_state_change_event(
             self.hass, list(counters.keys()), self._handle_event
         )
         self._unsub_timer = async_track_time_interval(
-            self.hass, self._async_evaluate, timedelta(seconds=EVALUATION_INTERVAL)
+            self.hass, self._async_tick, timedelta(seconds=EVALUATION_INTERVAL)
         )
         self._schedule_save()
+
+    def _apply_initial_credit(self) -> None:
+        credit = self._compute_initial_credit()
+        self.initial_credit = credit
+        self.total_savings += credit
+        self.initial_pending = False
+        self._schedule_save()
+
+    def _initial_ready(self) -> bool:
+        """Alles lesbar, was die Startgutschrift braucht? Sonst wäre sie still 0."""
+        cfg = self.config
+        if float(cfg.get(CONF_INITIAL_PRICE, 0) or 0) <= 0 and self._current_price() is None:
+            return False
+        feed_in_entity = cfg.get(CONF_FEED_IN_ENTITY)
+        if (
+            feed_in_entity
+            and float(cfg.get(CONF_INITIAL_FEED_IN, 0) or 0) <= 0
+            and self._read_entity(feed_in_entity) is None
+            and self.last_feed_in is None
+        ):
+            return False
+        return self._initial_sources_ready()
+
+    @callback
+    def _async_tick(self, now=None) -> None:
+        if self.initial_pending and self._initial_ready():
+            self._apply_initial_credit()
+            self._notify()
+        self._async_evaluate(now)
 
     def _seed(self, entity_id: str, counter: MonotonicCounter) -> None:
         if counter.raw_last is not None:
@@ -266,6 +314,7 @@ class BaseManager:
             "last_feed_in": self.last_feed_in,
             "last_investment": self.last_investment,
             "start_time": self.start_time,
+            "initial_pending": self.initial_pending,
         }
         data.update(self._extra_save())
         return data
@@ -346,6 +395,10 @@ class BaseManager:
     def _async_evaluate(self, now=None) -> None:
         raise NotImplementedError
 
+    def _initial_sources_ready(self) -> bool:
+        """Subklasse: sind die für die automatische Startgutschrift nötigen Zähler gelesen?"""
+        raise NotImplementedError
+
     def _compute_initial_credit(self) -> float:
         raise NotImplementedError
 
@@ -388,8 +441,15 @@ class DirectManager(BaseManager):
     def _prod_total(self) -> float:
         return sum(c.total for c in self.prod_counters.values())
 
-    def _prod_raw(self) -> float:
-        return sum((c.raw_last or 0.0) for c in self.prod_counters.values())
+    def _prod_initial(self) -> float:
+        return sum(c.initial for c in self.prod_counters.values())
+
+    def _initial_sources_ready(self) -> bool:
+        if not self.config.get(CONF_INITIAL_AUTO):
+            return True
+        return self.grid.raw_last is not None and all(
+            c.raw_last is not None for c in self.prod_counters.values()
+        )
 
     def _counters(self) -> dict[str, MonotonicCounter]:
         result = dict(self.prod_counters)
@@ -478,8 +538,10 @@ class DirectManager(BaseManager):
         euro = float(cfg.get(CONF_INITIAL_SAVINGS, 0) or 0)
         price, feed_in = self._initial_rates()
         if cfg.get(CONF_INITIAL_AUTO):
-            self_kwh = max(self._prod_raw() - (self.grid.raw_last or 0.0), 0.0)
-            export = self.grid.raw_last or 0.0
+            # Stand beim ersten Lesen (raw_last - total), falls ein Sensor erst
+            # nach dem Start verfügbar wurde
+            export = self.grid.initial
+            self_kwh = max(self._prod_initial() - export, 0.0)
         else:
             self_kwh = float(cfg.get(CONF_INITIAL_SELF_KWH, 0) or 0)
             export = float(cfg.get(CONF_INITIAL_EXPORT_KWH, 0) or 0)
@@ -536,6 +598,11 @@ class StorageManager(BaseManager):
             "base_discharge": self.base_discharge,
         }
 
+    def _initial_sources_ready(self) -> bool:
+        if not self.config.get(CONF_INITIAL_AUTO):
+            return True
+        return self.charge.raw_last is not None and self.discharge.raw_last is not None
+
     @property
     def total_charged(self) -> float:
         return self.base_charge + self.charge.total
@@ -585,8 +652,8 @@ class StorageManager(BaseManager):
         euro = float(cfg.get(CONF_INITIAL_SAVINGS, 0) or 0)
         price, feed_in = self._initial_rates()
         if cfg.get(CONF_INITIAL_AUTO):
-            discharge = self.discharge.raw_last or 0.0
-            charge = self.charge.raw_last or 0.0
+            discharge = self.discharge.initial
+            charge = self.charge.initial
         else:
             discharge = float(cfg.get(CONF_INITIAL_DISCHARGE_KWH, 0) or 0)
             charge = float(cfg.get(CONF_INITIAL_CHARGE_KWH, 0) or 0)
