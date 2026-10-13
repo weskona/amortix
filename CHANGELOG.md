@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-13
+
 ### Added
 - **System** mode can be changed afterwards via **Configure**: add producers and storage units (e.g. an AC storage later), edit name, cost entity, starting value and sensors of existing devices, and change prices, costs and the export sensor. Replacing a sensor keeps the existing total; changing a starting value books only the difference; a device added later is credited with its starting value once.
 
@@ -86,7 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Investment, price and feed-in tariff adjustable afterwards via **Configure**.
 - English and German translations.
 
-[Unreleased]: https://github.com/weskona/amortix/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/weskona/amortix/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/weskona/amortix/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/weskona/amortix/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/weskona/amortix/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/weskona/amortix/compare/v1.1.0...v1.2.0
