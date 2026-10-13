@@ -4,8 +4,33 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_MODE, DOMAIN, MODE_DIRECT, MODE_STORAGE, PLATFORMS
-from .coordinator import DirectManager, StorageManager
+from .const import (
+    CONF_MODE,
+    DOMAIN,
+    MODE_COMBINED,
+    MODE_DIRECT,
+    MODE_GENERIC,
+    MODE_HEATPUMP,
+    MODE_STORAGE,
+    MODE_WALLBOX,
+    PLATFORMS,
+)
+from .coordinator import (
+    CombinedManager,
+    DirectManager,
+    GenericManager,
+    HeatPumpManager,
+    StorageManager,
+)
+
+MANAGERS = {
+    MODE_DIRECT: DirectManager,
+    MODE_STORAGE: StorageManager,
+    MODE_COMBINED: CombinedManager,
+    MODE_WALLBOX: GenericManager,
+    MODE_GENERIC: GenericManager,
+    MODE_HEATPUMP: HeatPumpManager,
+}
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -22,7 +47,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     mode = entry.data.get(CONF_MODE, MODE_DIRECT)
-    manager = StorageManager(hass, entry) if mode == MODE_STORAGE else DirectManager(hass, entry)
+    manager = MANAGERS.get(mode, DirectManager)(hass, entry)
     await manager.async_start()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = manager

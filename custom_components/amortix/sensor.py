@@ -11,7 +11,16 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_MODE, DOMAIN, MODE_DIRECT, MODE_STORAGE
+from .const import (
+    CONF_MODE,
+    DOMAIN,
+    MODE_COMBINED,
+    MODE_DIRECT,
+    MODE_GENERIC,
+    MODE_HEATPUMP,
+    MODE_STORAGE,
+    MODE_WALLBOX,
+)
 
 
 async def async_setup_entry(
@@ -31,7 +40,32 @@ async def async_setup_entry(
         PaybackDateSensor(manager, entry),
     ]
 
-    if mode == MODE_STORAGE:
+    if mode == MODE_COMBINED:
+        specific = [
+            DeltaSavingsSensor(manager, entry),
+            PartSavingsSensor(manager, entry, "self", "einsparung_netzbezug", "Einsparung Netzbezug", "mdi:transmission-tower-import"),
+            PartSavingsSensor(manager, entry, "export", "einsparung_einspeisung", "Einsparung Einspeisung", "mdi:transmission-tower-export"),
+            SelfConsumptionSensor(manager, entry),
+            DeltaEnergySensor(manager, entry, "production", "erzeugung", "Erzeugung gesamt", "mdi:solar-power"),
+            DeltaEnergySensor(manager, entry, "charge", "ladung", "Ladung gesamt", "mdi:battery-arrow-up"),
+            DeltaEnergySensor(manager, entry, "discharge", "entladung", "Entladung gesamt", "mdi:battery-arrow-down"),
+            RoundtripSensor(manager, entry),
+        ]
+    elif mode in (MODE_WALLBOX, MODE_GENERIC):
+        specific = [
+            DeltaSavingsSensor(manager, entry),
+            DeltaEnergySensor(manager, entry, "energy", "energie", "Energie gesamt", "mdi:ev-station" if mode == MODE_WALLBOX else "mdi:flash"),
+        ]
+    elif mode == MODE_HEATPUMP:
+        specific = [
+            DeltaSavingsSensor(manager, entry),
+            PartSavingsSensor(manager, entry, "heat", "einsparung_waerme", "Einsparung Wärme", "mdi:radiator"),
+            PartSavingsSensor(manager, entry, "electric", "stromkosten", "Stromkosten Wärmepumpe", "mdi:flash"),
+            DeltaEnergySensor(manager, entry, "heat", "waerme", "Wärme gesamt", "mdi:fire"),
+            DeltaEnergySensor(manager, entry, "electric", "strom", "Strom gesamt", "mdi:flash"),
+            CopSensor(manager, entry),
+        ]
+    elif mode == MODE_STORAGE:
         specific = [
             StorageSavingsSensor(manager, entry),
             DischargeSensor(manager, entry),
@@ -281,3 +315,71 @@ class RoundtripSensor(_BaseSensor):
     def native_value(self):
         v = self.manager.roundtrip
         return round(v, 1) if v is not None else None
+
+
+# ---------------------------------------------------------------- Delta-Modi
+class DeltaSavingsSensor(_BaseSensor):
+    _key = "einsparung"
+    _attr_name = "Einsparung gesamt"
+    _attr_icon = "mdi:cash-multiple"
+    _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_suggested_display_precision = 2
+
+    @property
+    def native_value(self):
+        return round(self.manager.total_savings, 2)
+
+    @property
+    def extra_state_attributes(self):
+        return self.manager.attributes()
+
+
+class PartSavingsSensor(_BaseSensor):
+    _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, manager, entry, part, key, name, icon) -> None:
+        self._part = part
+        self._key = key
+        self._attr_name = name
+        self._attr_icon = icon
+        super().__init__(manager, entry)
+
+    @property
+    def native_value(self):
+        return round(self.manager.parts[self._part], 2)
+
+
+class DeltaEnergySensor(_BaseSensor):
+    _attr_native_unit_of_measurement = "kWh"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, manager, entry, counter_key, key, name, icon) -> None:
+        self._counter_key = counter_key
+        self._key = key
+        self._attr_name = name
+        self._attr_icon = icon
+        super().__init__(manager, entry)
+
+    @property
+    def native_value(self):
+        return round(self.manager.kwh(self._counter_key), 3)
+
+
+class CopSensor(_BaseSensor):
+    _key = "jaz"
+    _attr_name = "Arbeitszahl (Wärme ÷ Strom)"
+    _attr_icon = "mdi:heat-pump"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 2
+
+    @property
+    def native_value(self):
+        v = self.manager.cop
+        return round(v, 2) if v is not None else None

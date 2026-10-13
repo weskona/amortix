@@ -5,7 +5,11 @@
         "title": "What do you want to amortize?",
         "menu_options": {
           "direct": "Direct use (balcony/PV without storage)",
-          "storage": "Storage (charge/discharge balance)"
+          "storage": "Storage (charge/discharge balance)",
+          "combined": "PV with storage (combined)",
+          "wallbox": "Wallbox / EV",
+          "heatpump": "Heat pump",
+          "generic": "General (custom comparison)"
         }
       },
       "direct": {
@@ -73,10 +77,106 @@
           "initial_feed_in": "Optional. Empty/0 = current tariff from the input_number (or 0).",
           "initial_savings": "Optional. Added on top of the calculated starting credit."
         }
+      },
+      "combined": {
+        "title": "Set up PV with storage",
+        "description": "A PV and battery system in a single entry.\n\nSavings = (production − export − charge + discharge) × grid price + export × feed-in tariff. Every component is valued individually at the price valid at that moment. Charging losses therefore cost the grid price automatically, and charging from the grid (e.g. at a cheap tariff) is handled correctly: charging costs at charge time, discharging earns the price valid at discharge time.\n\n**Required:**\n- cumulative kWh counters for **production**, **export**, **battery charge** and **battery discharge**\n- purchase cost (whole system) and grid price as entities\n\nLimit: if the battery feeds back into the grid, that is part of the export and is valued at the feed-in tariff.",
+        "data": {
+          "name": "Name",
+          "production_sensor": "PV production (one or more kWh sensors)",
+          "to_grid_sensor": "Export / to_grid",
+          "charge_sensor": "Battery charge (kWh, cumulative)",
+          "discharge_sensor": "Battery discharge (kWh, cumulative)",
+          "investment_entity": "Purchase cost (total)",
+          "price_entity": "Grid electricity price",
+          "feed_in_entity": "Feed-in tariff (optional)",
+          "initial_auto": "Calculate starting credit automatically from current meter readings",
+          "initial_savings": "Starting credit: flat amount in euros"
+        },
+        "data_description": {
+          "name": "Free choice. Determines the names of the created sensors.",
+          "production_sensor": "Cumulative kWh production counters. Several allowed – they are summed.",
+          "to_grid_sensor": "Cumulative kWh export at the grid connection point.",
+          "charge_sensor": "Cumulative kWh counter of battery charging.",
+          "discharge_sensor": "Cumulative kWh counter of battery discharging.",
+          "investment_entity": "Entity with the cost in € (PV and storage together).",
+          "price_entity": "Grid price in €/kWh – dynamic is fine.",
+          "feed_in_entity": "Tariff in €/kWh. Empty = 0.",
+          "initial_auto": "Values the current meter readings at the current prices. ONLY use if the meters hold real, matching history (not a freshly created helper).",
+          "initial_savings": "Optional. Savings accrued so far as a fixed euro amount; added on top."
+        }
+      },
+      "wallbox": {
+        "title": "Set up wallbox / EV",
+        "description": "Savings = charged kWh × (reference price − own price).\n\n**Required:**\n- cumulative kWh counter of the **charged energy** (wallbox or car)\n- purchase cost as an entity\n- **reference price** in €/kWh you would pay otherwise (e.g. public charger or cost per kWh of petrol/diesel)\n- optional **own price** in €/kWh (home electricity price; 0 or the lost feed-in tariff when charging from PV). Empty = 0.",
+        "data": {
+          "name": "Name",
+          "energy_sensor": "Charged energy (kWh, cumulative)",
+          "investment_entity": "Purchase cost",
+          "reference_price_entity": "Reference price (€/kWh)",
+          "own_price_entity": "Own price (optional, €/kWh)",
+          "initial_auto": "Calculate starting credit automatically from current meter readings",
+          "initial_savings": "Starting credit: flat amount in euros"
+        },
+        "data_description": {
+          "name": "Free choice.",
+          "energy_sensor": "Cumulative kWh counter of the charged energy.",
+          "investment_entity": "Entity with the cost in €.",
+          "reference_price_entity": "What the same kWh would otherwise cost, in €/kWh – dynamic is fine.",
+          "own_price_entity": "What the kWh actually costs you, in €/kWh. Empty = 0.",
+          "initial_auto": "Values the current meter readings at the current prices. ONLY use if the meters hold real, matching history (not a freshly created helper).",
+          "initial_savings": "Optional. Savings accrued so far as a fixed euro amount; added on top."
+        }
+      },
+      "generic": {
+        "title": "Set up a general comparison",
+        "description": "For everything that fits no category: savings = kWh × (reference price − own price).\n\n**Required:**\n- cumulative kWh counter\n- purchase cost as an entity\n- **reference price** in €/kWh (what the kWh would otherwise cost)\n- optional **own price** in €/kWh. Empty = 0.",
+        "data": {
+          "name": "Name",
+          "energy_sensor": "Energy (kWh, cumulative)",
+          "investment_entity": "Purchase cost",
+          "reference_price_entity": "Reference price (€/kWh)",
+          "own_price_entity": "Own price (optional, €/kWh)",
+          "initial_auto": "Calculate starting credit automatically from current meter readings",
+          "initial_savings": "Starting credit: flat amount in euros"
+        },
+        "data_description": {
+          "name": "Free choice.",
+          "energy_sensor": "Cumulative kWh counter.",
+          "investment_entity": "Entity with the cost in €.",
+          "reference_price_entity": "What the same kWh would otherwise cost, in €/kWh – dynamic is fine.",
+          "own_price_entity": "What the kWh actually costs you, in €/kWh. Empty = 0.",
+          "initial_auto": "Values the current meter readings at the current prices. ONLY use if the meters hold real, matching history (not a freshly created helper).",
+          "initial_savings": "Optional. Savings accrued so far as a fixed euro amount; added on top."
+        }
+      },
+      "heatpump": {
+        "title": "Set up heat pump",
+        "description": "Savings = heat × reference price − electricity × grid price.\n\n**Required:**\n- cumulative kWh counter of the generated **heat**\n- cumulative kWh counter of the heat pump's **electricity consumption**\n- purchase cost as an entity\n- **electricity price** in €/kWh\n- **reference price**: cost per kWh of *heat* of the heating you replace (e.g. gas price ÷ boiler efficiency). As a template sensor or input_number.\n\nThe coefficient of performance (heat ÷ electricity) is calculated as well.",
+        "data": {
+          "name": "Name",
+          "heat_sensor": "Heat (kWh, cumulative)",
+          "electric_sensor": "Electricity consumption (kWh, cumulative)",
+          "investment_entity": "Purchase cost",
+          "price_entity": "Electricity price",
+          "reference_price_entity": "Reference price heat (€/kWh)",
+          "initial_auto": "Calculate starting credit automatically from current meter readings",
+          "initial_savings": "Starting credit: flat amount in euros"
+        },
+        "data_description": {
+          "name": "Free choice.",
+          "heat_sensor": "Cumulative kWh counter of the generated heat (heat meter).",
+          "electric_sensor": "Cumulative kWh counter of the heat pump's electricity consumption.",
+          "investment_entity": "Entity with the cost in €.",
+          "price_entity": "Electricity price in €/kWh – dynamic is fine.",
+          "reference_price_entity": "Cost per kWh of heat of the replaced heating, in €/kWh.",
+          "initial_auto": "Values the current meter readings at the current prices. ONLY use if the meters hold real, matching history (not a freshly created helper).",
+          "initial_savings": "Optional. Savings accrued so far as a fixed euro amount; added on top."
+        }
       }
     },
     "error": {
-      "same_sensor": "The sensors must be different (export must not be among the production sensors)."
+      "same_sensor": "Every sensor may only be chosen once (e.g. export must not be among the production sensors)."
     }
   },
   "options": {
@@ -87,12 +187,16 @@
         "data": {
           "investment_entity": "Purchase cost",
           "price_entity": "Grid electricity price",
-          "feed_in_entity": "Feed-in tariff (optional)"
+          "feed_in_entity": "Feed-in tariff (optional)",
+          "reference_price_entity": "Reference price (€/kWh)",
+          "own_price_entity": "Own price (optional)"
         },
         "data_description": {
           "investment_entity": "input_number/sensor with the purchase cost in €.",
           "price_entity": "input_number/sensor with the grid price in €/kWh.",
-          "feed_in_entity": "input_number/sensor with the tariff in €/kWh. Empty = 0."
+          "feed_in_entity": "input_number/sensor with the tariff in €/kWh. Empty = 0.",
+          "reference_price_entity": "What the same kWh would otherwise cost, in €/kWh.",
+          "own_price_entity": "What the kWh actually costs you, in €/kWh. Empty = 0."
         }
       }
     }

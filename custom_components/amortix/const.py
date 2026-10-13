@@ -7,6 +7,10 @@ PLATFORMS = ["sensor"]
 CONF_MODE = "mode"
 MODE_DIRECT = "direct"     # Direktverbrauch (BKW/PV ohne Speicher)
 MODE_STORAGE = "storage"   # Speicher (Lade-/Entladebilanz)
+MODE_COMBINED = "combined"   # PV + Speicher in einem Eintrag
+MODE_WALLBOX = "wallbox"     # Wallbox / E-Auto
+MODE_HEATPUMP = "heatpump"   # Wärmepumpe
+MODE_GENERIC = "generic"     # Allgemein: kWh-Zähler gegen Vergleichspreis
 
 # Sensoren – Direktverbrauch
 CONF_PRODUCTION_SENSOR = "production_sensor"   # PV-Erzeugung (kWh)
@@ -17,10 +21,17 @@ CONF_CHARGE_SENSOR = "charge_sensor"           # Ladung (kWh)
 CONF_DISCHARGE_SENSOR = "discharge_sensor"     # Entladung (kWh)
 CONF_ROUNDTRIP_ENTITY = "roundtrip_entity"     # optional: vorhandener η-Sensor (%)
 
+# Sensoren – Wallbox / Allgemein / Wärmepumpe
+CONF_ENERGY_SENSOR = "energy_sensor"           # geladene/verbrauchte kWh
+CONF_HEAT_SENSOR = "heat_sensor"               # erzeugte Wärme (kWh)
+CONF_ELECTRIC_SENSOR = "electric_sensor"       # Stromverbrauch der Wärmepumpe (kWh)
+
 # Live-Werte (Entität: input_number oder Sensor)
 CONF_INVESTMENT_ENTITY = "investment_entity"   # Anschaffungskosten (€)        Pflicht
 CONF_PRICE_ENTITY = "price_entity"             # Strompreis Netzbezug (€/kWh)  Pflicht
 CONF_FEED_IN_ENTITY = "feed_in_entity"         # Einspeisevergütung (€/kWh)    optional -> 0
+CONF_REFERENCE_PRICE_ENTITY = "reference_price_entity"  # Vergleichspreis (€/kWh)  Wallbox/Allgemein/Wärmepumpe
+CONF_OWN_PRICE_ENTITY = "own_price_entity"     # eigener Preis (€/kWh)         Wallbox/Allgemein, optional -> 0
 
 # Startgutschrift (nur einmalig bei der Einrichtung wirksam)
 CONF_INITIAL_AUTO = "initial_auto"

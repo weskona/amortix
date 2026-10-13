@@ -16,7 +16,10 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_CHARGE_SENSOR,
     CONF_DISCHARGE_SENSOR,
+    CONF_ELECTRIC_SENSOR,
+    CONF_ENERGY_SENSOR,
     CONF_FEED_IN_ENTITY,
+    CONF_HEAT_SENSOR,
     CONF_INITIAL_AUTO,
     CONF_INITIAL_CHARGE_KWH,
     CONF_INITIAL_DISCHARGE_KWH,
@@ -26,8 +29,10 @@ from .const import (
     CONF_INITIAL_SAVINGS,
     CONF_INITIAL_SELF_KWH,
     CONF_INVESTMENT_ENTITY,
+    CONF_OWN_PRICE_ENTITY,
     CONF_PRICE_ENTITY,
     CONF_PRODUCTION_SENSOR,
+    CONF_REFERENCE_PRICE_ENTITY,
     CONF_ROUNDTRIP_ENTITY,
     CONF_TO_GRID_SENSOR,
     DOMAIN,
@@ -680,3 +685,255 @@ class StorageManager(BaseManager):
         # wie im laufenden Betrieb (_async_evaluate) darf die Bilanz negativ sein,
         # damit Summe und Aufschlüsselung übereinstimmen
         return euro + benefit
+
+
+class DeltaManager(BaseManager):
+    """Basis für Modi, die jeden Zähler einzeln und inkrementell bewerten.
+
+    Jede kWh-Änderung eines Zählers wird zum jeweils aktuellen Preis bewertet
+    (Summe über alle Zähler). Es gibt keine Differenz zwischen Zählern, daher
+    ist die Rechnung unempfindlich gegen zeitlich versetzte Sensor-Updates.
+    """
+
+    # key -> Config-Key des/der Sensoren
+    SENSORS: dict[str, str] = {}
+    # name -> (Config-Key der Preis-Entität, Pflicht?)
+    RATES: dict[str, tuple[str, bool]] = {}
+    # Teilsummen der Ersparnis
+    PARTS: tuple[str, ...] = ()
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        super().__init__(hass, entry)
+        self.groups: dict[str, dict[str, MonotonicCounter]] = {
+            key: {eid: MonotonicCounter() for eid in self._ids(conf)}
+            for key, conf in self.SENSORS.items()
+        }
+        self.credited: dict[str, float] = {k: 0.0 for k in self.groups}
+        self.base: dict[str, float] = {k: 0.0 for k in self.groups}
+        self.parts: dict[str, float] = {p: 0.0 for p in self.PARTS}
+        self.last_rates: dict[str, float] = {}
+
+    def _ids(self, conf: str) -> list[str]:
+        val = self.config[conf]
+        return list(val) if isinstance(val, (list, tuple)) else [val]
+
+    # ------------------------------------------------------------------
+    def total(self, key: str) -> float:
+        """Seit Start gezählte kWh (ohne Startwert)."""
+        return sum(c.total for c in self.groups[key].values())
+
+    def kwh(self, key: str) -> float:
+        """Gesamt-kWh inklusive Startwert aus der automatischen Startgutschrift."""
+        return self.base[key] + self.total(key)
+
+    def _counters(self) -> dict[str, MonotonicCounter]:
+        return {
+            eid: counter
+            for group in self.groups.values()
+            for eid, counter in group.items()
+        }
+
+    def _restore_counters(self, data: dict) -> None:
+        saved = data.get("groups", {})
+        for key, group in self.groups.items():
+            for eid, counter in group.items():
+                if eid in saved.get(key, {}):
+                    counter.restore(*saved[key][eid])
+        for key in self.groups:
+            self.credited[key] = data.get("credited", {}).get(key, 0.0)
+            self.base[key] = data.get("base", {}).get(key, 0.0)
+        for part in self.parts:
+            self.parts[part] = data.get("parts", {}).get(part, 0.0)
+        self.last_rates = dict(data.get("last_rates", {}))
+
+    def _extra_save(self) -> dict:
+        return {
+            "groups": {
+                key: {eid: [c.raw_last, c.total] for eid, c in group.items()}
+                for key, group in self.groups.items()
+            },
+            "credited": dict(self.credited),
+            "base": dict(self.base),
+            "parts": dict(self.parts),
+            "last_rates": dict(self.last_rates),
+        }
+
+    # ------------------------------------------------------------------
+    def _rates(self) -> dict[str, float] | None:
+        """Aktuelle Preise (live gelesen, Cent -> €); None, wenn ein Pflichtpreis fehlt."""
+        rates: dict[str, float] = {}
+        for name, (conf, required) in self.RATES.items():
+            value = self._read_entity(self.config.get(conf), rate=True)
+            if value is not None:
+                self.last_rates[name] = value
+            else:
+                value = self.last_rates.get(name)
+            if value is None:
+                if required:
+                    return None
+                value = 0.0
+            rates[name] = value
+        return rates
+
+    def _value(self, key: str, delta: float, rates: dict[str, float]) -> list[tuple[str, float]]:
+        """Wert von `delta` kWh des Zählers `key` als Liste (Teilsumme, Euro)."""
+        raise NotImplementedError
+
+    @callback
+    def _async_evaluate(self, now=None) -> None:
+        rates = self._rates()
+        if rates is None:
+            return
+        changed = False
+        for key in self.groups:
+            total = self.total(key)
+            delta = total - self.credited[key]
+            if delta <= 0:
+                continue
+            for part, euros in self._value(key, delta, rates):
+                self.total_savings += euros
+                self.parts[part] += euros
+            self.credited[key] = total
+            changed = True
+        if changed:
+            self._schedule_save()
+            self._notify()
+
+    # ------------------------------------------------------------------
+    def _initial_sources_ready(self) -> bool:
+        if not self.config.get(CONF_INITIAL_AUTO):
+            return True
+        return all(c.raw_last is not None for c in self._counters().values())
+
+    def _initial_ready(self) -> bool:
+        return self._rates() is not None and self._initial_sources_ready()
+
+    def _compute_initial_credit(self) -> float:
+        euro = float(self.config.get(CONF_INITIAL_SAVINGS, 0) or 0)
+        auto = 0.0
+        if self.config.get(CONF_INITIAL_AUTO):
+            rates = self._rates() or {}
+            for key, group in self.groups.items():
+                self.base[key] = sum(c.initial for c in group.values())
+                for part, euros in self._value(key, self.base[key], rates):
+                    auto += euros
+                    self.parts[part] += euros
+        self.credit_breakdown = {
+            "zaehlerstaende_eur": round(auto, 2),
+            "pauschal_eur": round(euro, 2),
+        }
+        return euro + auto
+
+    # ------------------------------------------------------------------
+    def attributes(self) -> dict:
+        """Zusatzattribute des Gesamt-Ersparnis-Sensors (Subklassen ergänzen)."""
+        attrs = {
+            "startgutschrift_eur": round(self.initial_credit, 2),
+            "einsparung_seit_start_eur": round(self.total_savings - self.initial_credit, 2),
+            "inbetriebnahme": self.start_time,
+        }
+        for key, value in self.credit_breakdown.items():
+            attrs[f"startgutschrift_{key}"] = value
+        return attrs
+
+
+class GenericManager(DeltaManager):
+    """Wallbox / Allgemein: kWh × (Vergleichspreis − eigener Preis)."""
+
+    SENSORS = {"energy": CONF_ENERGY_SENSOR}
+    RATES = {
+        "reference": (CONF_REFERENCE_PRICE_ENTITY, True),
+        "own": (CONF_OWN_PRICE_ENTITY, False),
+    }
+    PARTS = ("total",)
+
+    def _value(self, key, delta, rates):
+        return [("total", delta * (rates["reference"] - rates["own"]))]
+
+    def attributes(self) -> dict:
+        attrs = super().attributes()
+        attrs["energie_kwh"] = round(self.kwh("energy"), 3)
+        return attrs
+
+
+class HeatPumpManager(DeltaManager):
+    """Wärmepumpe: Wärme × Referenzpreis − Strom × Strompreis."""
+
+    SENSORS = {"heat": CONF_HEAT_SENSOR, "electric": CONF_ELECTRIC_SENSOR}
+    RATES = {
+        "reference": (CONF_REFERENCE_PRICE_ENTITY, True),
+        "price": (CONF_PRICE_ENTITY, True),
+    }
+    PARTS = ("heat", "electric")
+
+    def _value(self, key, delta, rates):
+        if key == "heat":
+            return [("heat", delta * rates["reference"])]
+        return [("electric", -delta * rates["price"])]
+
+    @property
+    def cop(self) -> float | None:
+        """Jahresarbeitszahl (Wärme ÷ Strom) über die gesamte Laufzeit."""
+        electric = self.kwh("electric")
+        if electric <= 0:
+            return None
+        return self.kwh("heat") / electric
+
+    def attributes(self) -> dict:
+        attrs = super().attributes()
+        attrs["waerme_kwh"] = round(self.kwh("heat"), 3)
+        attrs["strom_kwh"] = round(self.kwh("electric"), 3)
+        return attrs
+
+
+class CombinedManager(DeltaManager):
+    """PV + Speicher: (Erzeugung − Einspeisung − Ladung + Entladung) × Preis + Einspeisung × Vergütung.
+
+    Jede Komponente wird einzeln zum aktuellen Preis bewertet. Dadurch ist auch
+    Netzladung (Tarif-Arbitrage) korrekt abgebildet: Ladung kostet beim Laden,
+    Entladung bringt beim Entladen den dann gültigen Preis.
+    """
+
+    SENSORS = {
+        "production": CONF_PRODUCTION_SENSOR,
+        "export": CONF_TO_GRID_SENSOR,
+        "charge": CONF_CHARGE_SENSOR,
+        "discharge": CONF_DISCHARGE_SENSOR,
+    }
+    RATES = {
+        "price": (CONF_PRICE_ENTITY, True),
+        "feed_in": (CONF_FEED_IN_ENTITY, False),
+    }
+    PARTS = ("self", "export")
+
+    def _value(self, key, delta, rates):
+        price = rates["price"]
+        if key == "production":
+            return [("self", delta * price)]
+        if key == "export":
+            return [("self", -delta * price), ("export", delta * rates["feed_in"])]
+        if key == "charge":
+            return [("self", -delta * price)]
+        return [("self", delta * price)]  # discharge
+
+    @property
+    def total_self_consumed(self) -> float:
+        """Erzeugung − Einspeisung (enthält die in den Speicher geladene Energie)."""
+        return self.kwh("production") - self.kwh("export")
+
+    @property
+    def roundtrip(self) -> float | None:
+        charged = self.kwh("charge")
+        if charged <= 0:
+            return None
+        return self.kwh("discharge") / charged * 100.0
+
+    def attributes(self) -> dict:
+        attrs = super().attributes()
+        attrs.update(
+            erzeugung_kwh=round(self.kwh("production"), 3),
+            einspeisung_kwh=round(self.kwh("export"), 3),
+            ladung_kwh=round(self.kwh("charge"), 3),
+            entladung_kwh=round(self.kwh("discharge"), 3),
+        )
+        return attrs

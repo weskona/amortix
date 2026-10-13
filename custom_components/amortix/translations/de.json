@@ -5,7 +5,11 @@
         "title": "Was möchtest du amortisieren?",
         "menu_options": {
           "direct": "Direktverbrauch (BKW/PV ohne Speicher)",
-          "storage": "Speicher (Lade-/Entladebilanz)"
+          "storage": "Speicher (Lade-/Entladebilanz)",
+          "combined": "PV mit Speicher (kombiniert)",
+          "wallbox": "Wallbox / E-Auto",
+          "heatpump": "Wärmepumpe",
+          "generic": "Allgemein (eigener Vergleich)"
         }
       },
       "direct": {
@@ -73,10 +77,106 @@
           "initial_feed_in": "Optional. Leer/0 = aktuelle Vergütung aus der input_number (bzw. 0).",
           "initial_savings": "Optional. Wird zusätzlich zur berechneten Startgutschrift addiert."
         }
+      },
+      "combined": {
+        "title": "PV mit Speicher einrichten",
+        "description": "Eine Anlage aus PV und Batterie in einem Eintrag.\n\nErsparnis = (Erzeugung − Einspeisung − Ladung + Entladung) × Strompreis + Einspeisung × Vergütung. Jede Komponente wird einzeln zum jeweils aktuellen Preis bewertet. Ladeverluste kosten dadurch automatisch den Strompreis; auch Laden aus dem Netz (z. B. bei günstigem Tarif) ist korrekt abgebildet: Die Ladung kostet beim Laden, die Entladung bringt beim Entladen den dann gültigen Preis.\n\n**Benötigt:**\n- kumulierende kWh-Zähler für **Erzeugung**, **Einspeisung**, **Batterie-Ladung** und **Batterie-Entladung**\n- Anschaffungskosten (gesamte Anlage) und Strompreis als Entität\n\nGrenze: Speist der Speicher ins Netz zurück, ist das in der Einspeisung enthalten und wird mit der Vergütung bewertet.",
+        "data": {
+          "name": "Name",
+          "production_sensor": "PV-Erzeugung (ein oder mehrere kWh-Sensoren)",
+          "to_grid_sensor": "Einspeisung / to_grid",
+          "charge_sensor": "Batterie-Ladung (kWh, kumulierend)",
+          "discharge_sensor": "Batterie-Entladung (kWh, kumulierend)",
+          "investment_entity": "Anschaffungskosten (gesamt)",
+          "price_entity": "Strompreis Netzbezug",
+          "feed_in_entity": "Einspeisevergütung (optional)",
+          "initial_auto": "Startgutschrift automatisch aus aktuellen Zählerständen berechnen",
+          "initial_savings": "Startgutschrift: pauschaler Euro-Betrag"
+        },
+        "data_description": {
+          "name": "Frei wählbar. Bestimmt die Namen der erzeugten Sensoren.",
+          "production_sensor": "Kumulierende kWh-Zähler der Erzeugung. Mehrere wählbar – sie werden summiert.",
+          "to_grid_sensor": "Kumulierende kWh-Einspeisung am Netzübergabepunkt.",
+          "charge_sensor": "Kumulierender kWh-Zähler der Batterie-Ladung.",
+          "discharge_sensor": "Kumulierender kWh-Zähler der Batterie-Entladung.",
+          "investment_entity": "Entität mit den Kosten in € (PV und Speicher zusammen).",
+          "price_entity": "Netzbezugspreis in €/kWh – auch dynamisch.",
+          "feed_in_entity": "Vergütung in €/kWh. Leer = 0.",
+          "initial_auto": "Bewertet die aktuellen Zählerstände mit den aktuellen Preisen. NUR verwenden, wenn die Zähler echte, zusammengehörige Historie haben (kein frisch erstellter Helfer).",
+          "initial_savings": "Optional. Bisher aufgelaufene Ersparnis als fester Euro-Betrag; wird zusätzlich addiert."
+        }
+      },
+      "wallbox": {
+        "title": "Wallbox / E-Auto einrichten",
+        "description": "Ersparnis = geladene kWh × (Vergleichspreis − eigener Preis).\n\n**Benötigt:**\n- kumulierender kWh-Zähler der **Ladung** (Wallbox oder Auto)\n- Anschaffungskosten als Entität\n- **Vergleichspreis** in €/kWh, den du sonst zahlen würdest (z. B. öffentliche Ladesäule oder Kosten pro kWh Benzin/Diesel)\n- optional **eigener Preis** in €/kWh (Strompreis zu Hause, bei PV-Laden 0 oder entgangene Einspeisung). Leer = 0.",
+        "data": {
+          "name": "Name",
+          "energy_sensor": "Geladene Energie (kWh, kumulierend)",
+          "investment_entity": "Anschaffungskosten",
+          "reference_price_entity": "Vergleichspreis (€/kWh)",
+          "own_price_entity": "Eigener Preis (optional, €/kWh)",
+          "initial_auto": "Startgutschrift automatisch aus aktuellen Zählerständen berechnen",
+          "initial_savings": "Startgutschrift: pauschaler Euro-Betrag"
+        },
+        "data_description": {
+          "name": "Frei wählbar.",
+          "energy_sensor": "Kumulierender kWh-Zähler der geladenen Energie.",
+          "investment_entity": "Entität mit den Kosten in €.",
+          "reference_price_entity": "Was dieselbe kWh sonst kosten würde, in €/kWh – auch dynamisch.",
+          "own_price_entity": "Was die kWh dich tatsächlich kostet, in €/kWh. Leer = 0.",
+          "initial_auto": "Bewertet die aktuellen Zählerstände mit den aktuellen Preisen. NUR verwenden, wenn die Zähler echte, zusammengehörige Historie haben (kein frisch erstellter Helfer).",
+          "initial_savings": "Optional. Bisher aufgelaufene Ersparnis als fester Euro-Betrag; wird zusätzlich addiert."
+        }
+      },
+      "generic": {
+        "title": "Allgemeinen Vergleich einrichten",
+        "description": "Für alles, was keiner Kategorie entspricht: Ersparnis = kWh × (Vergleichspreis − eigener Preis).\n\n**Benötigt:**\n- kumulierender kWh-Zähler\n- Anschaffungskosten als Entität\n- **Vergleichspreis** in €/kWh (was die kWh sonst kosten würde)\n- optional **eigener Preis** in €/kWh. Leer = 0.",
+        "data": {
+          "name": "Name",
+          "energy_sensor": "Energie (kWh, kumulierend)",
+          "investment_entity": "Anschaffungskosten",
+          "reference_price_entity": "Vergleichspreis (€/kWh)",
+          "own_price_entity": "Eigener Preis (optional, €/kWh)",
+          "initial_auto": "Startgutschrift automatisch aus aktuellen Zählerständen berechnen",
+          "initial_savings": "Startgutschrift: pauschaler Euro-Betrag"
+        },
+        "data_description": {
+          "name": "Frei wählbar.",
+          "energy_sensor": "Kumulierender kWh-Zähler.",
+          "investment_entity": "Entität mit den Kosten in €.",
+          "reference_price_entity": "Was dieselbe kWh sonst kosten würde, in €/kWh – auch dynamisch.",
+          "own_price_entity": "Was die kWh dich tatsächlich kostet, in €/kWh. Leer = 0.",
+          "initial_auto": "Bewertet die aktuellen Zählerstände mit den aktuellen Preisen. NUR verwenden, wenn die Zähler echte, zusammengehörige Historie haben (kein frisch erstellter Helfer).",
+          "initial_savings": "Optional. Bisher aufgelaufene Ersparnis als fester Euro-Betrag; wird zusätzlich addiert."
+        }
+      },
+      "heatpump": {
+        "title": "Wärmepumpe einrichten",
+        "description": "Ersparnis = Wärme × Referenzpreis − Strom × Strompreis.\n\n**Benötigt:**\n- kumulierender kWh-Zähler der erzeugten **Wärme**\n- kumulierender kWh-Zähler des **Stromverbrauchs** der Wärmepumpe\n- Anschaffungskosten als Entität\n- **Strompreis** in €/kWh\n- **Referenzpreis**: Kosten pro kWh *Wärme* der Heizung, die du ersetzt (z. B. Gaspreis ÷ Wirkungsgrad des Kessels). Als Template-Sensor oder input_number.\n\nZusätzlich wird die Arbeitszahl (Wärme ÷ Strom) berechnet.",
+        "data": {
+          "name": "Name",
+          "heat_sensor": "Wärmemenge (kWh, kumulierend)",
+          "electric_sensor": "Stromverbrauch (kWh, kumulierend)",
+          "investment_entity": "Anschaffungskosten",
+          "price_entity": "Strompreis",
+          "reference_price_entity": "Referenzpreis Wärme (€/kWh)",
+          "initial_auto": "Startgutschrift automatisch aus aktuellen Zählerständen berechnen",
+          "initial_savings": "Startgutschrift: pauschaler Euro-Betrag"
+        },
+        "data_description": {
+          "name": "Frei wählbar.",
+          "heat_sensor": "Kumulierender kWh-Zähler der erzeugten Wärme (Wärmemengenzähler).",
+          "electric_sensor": "Kumulierender kWh-Zähler des Stromverbrauchs der Wärmepumpe.",
+          "investment_entity": "Entität mit den Kosten in €.",
+          "price_entity": "Strompreis in €/kWh – auch dynamisch.",
+          "reference_price_entity": "Kosten pro kWh Wärme der ersetzten Heizung in €/kWh.",
+          "initial_auto": "Bewertet die aktuellen Zählerstände mit den aktuellen Preisen. NUR verwenden, wenn die Zähler echte, zusammengehörige Historie haben (kein frisch erstellter Helfer).",
+          "initial_savings": "Optional. Bisher aufgelaufene Ersparnis als fester Euro-Betrag; wird zusätzlich addiert."
+        }
       }
     },
     "error": {
-      "same_sensor": "Die Sensoren müssen unterschiedlich sein (Einspeisung darf nicht zu den Erzeugungssensoren gehören)."
+      "same_sensor": "Jeder Sensor darf nur einmal gewählt werden (z. B. darf die Einspeisung nicht zu den Erzeugungssensoren gehören)."
     }
   },
   "options": {
@@ -87,12 +187,16 @@
         "data": {
           "investment_entity": "Anschaffungskosten",
           "price_entity": "Strompreis Netzbezug",
-          "feed_in_entity": "Einspeisevergütung (optional)"
+          "feed_in_entity": "Einspeisevergütung (optional)",
+          "reference_price_entity": "Vergleichspreis (€/kWh)",
+          "own_price_entity": "Eigener Preis (optional)"
         },
         "data_description": {
           "investment_entity": "input_number/Sensor mit den Anschaffungskosten in €.",
           "price_entity": "input_number/Sensor mit dem Netzbezugspreis in €/kWh.",
-          "feed_in_entity": "input_number/Sensor mit der Vergütung in €/kWh. Leer = 0."
+          "feed_in_entity": "input_number/Sensor mit der Vergütung in €/kWh. Leer = 0.",
+          "reference_price_entity": "Was dieselbe kWh sonst kosten würde, in €/kWh.",
+          "own_price_entity": "Was die kWh dich tatsächlich kostet, in €/kWh. Leer = 0."
         }
       }
     }
