@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- New mode **System**: any number of producers (large PV, each balcony plant on its own counter) and storage units (DC or AC) on one grid connection. Cost, savings, progress, remaining time and payback date **per device**; the savings split per device always adds up to the total. Per-device starting values (flat euro amount) for systems that are already running, plus the automatic starting credit split across the devices.
+- New mode **Overview**: combines all other Amortix entries (total savings, total investment, progress, remaining time) and exposes a full breakdown per device in the attribute `geraete` of the *Einsparung gesamt* sensor.
+
+### Changed
+- The mode *PV with storage (combined)* from 1.2.0 is replaced by **System** in the setup menu. Existing combined entries keep working unchanged.
+
 ## [1.2.0] - 2026-10-13
 
 ### Added

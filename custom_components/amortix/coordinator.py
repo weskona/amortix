@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, State, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
@@ -15,6 +16,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_CHARGE_SENSOR,
+    CONF_DEVICES,
     CONF_DISCHARGE_SENSOR,
     CONF_ELECTRIC_SENSOR,
     CONF_ENERGY_SENSOR,
@@ -34,11 +36,13 @@ from .const import (
     CONF_PRODUCTION_SENSOR,
     CONF_REFERENCE_PRICE_ENTITY,
     CONF_ROUNDTRIP_ENTITY,
+    CONF_STORAGES,
     CONF_TO_GRID_SENSOR,
     DOMAIN,
     EVALUATION_INTERVAL,
     INVALID_STATES,
     SAVE_DELAY,
+    SIGNAL_MANAGERS_CHANGED,
     STORAGE_VERSION,
 )
 
@@ -51,6 +55,20 @@ RESET_DROP_RATIO = 0.5
 # So viele Updates nach einer Reset-Bestätigung wird ein Sprung zurück auf den
 # alten Stand noch als Glitch erkannt und die Buchung zurückgenommen.
 RESET_GUARD_UPDATES = 3
+
+
+def _breakdown_line(name: str, mode: str | None, investment: float | None, savings: float) -> dict:
+    progress = None
+    if investment and investment > 0:
+        progress = round(max(0.0, min(savings / investment * 100.0, 100.0)), 1)
+    return {
+        "name": name,
+        "mode": mode,
+        "investment": round(investment, 2) if investment is not None else None,
+        "savings": round(savings, 2),
+        "progress": progress,
+        "remaining": round(max(investment - savings, 0.0), 2) if investment is not None else None,
+    }
 
 
 def _is_cent_unit(unit: str | None) -> bool:
@@ -128,7 +146,73 @@ class MonotonicCounter:
         self.raw_last = reading
 
 
-class BaseManager:
+class MetricsMixin:
+    """Fortschritt, Restbetrag und Prognose aus investment / total_savings / initial_credit.
+
+    Wird von Managern, Gerätesichten und der Gesamtübersicht genutzt. Die
+    einbindende Klasse stellt `investment`, `total_savings`, `initial_credit`
+    und `start_time` bereit.
+    """
+
+    @property
+    def progress(self) -> float | None:
+        inv = self.investment
+        if not inv or inv <= 0:
+            return None
+        # Bei Speicher-Betrieb kann total_savings vorübergehend unter
+        # initial_credit (sogar unter 0) fallen, wenn in einer Auswertung
+        # geladen, aber nicht entladen wird und die Einspeisevergütung > 0
+        # ist (entgangene Einspeisung wird abgezogen, siehe
+        # StorageManager._async_evaluate). Ohne Untergrenze würde die
+        # Fortschritts-% dann negativ, was für eine Amortisationsanzeige
+        # keinen Sinn ergibt.
+        return max(0.0, min(self.total_savings / inv * 100.0, 100.0))
+
+    @property
+    def remaining(self) -> float | None:
+        inv = self.investment
+        if inv is None:
+            return None
+        return max(inv - self.total_savings, 0.0)
+
+    @property
+    def elapsed_days(self) -> float:
+        if not self.start_time:
+            return 0.0
+        start = dt_util.parse_datetime(self.start_time)
+        if start is None:
+            return 0.0
+        return max((dt_util.utcnow() - start).total_seconds() / 86400.0, 0.0)
+
+    @property
+    def daily_average(self) -> float | None:
+        net = self.total_savings - self.initial_credit
+        days = self.elapsed_days
+        if days < 0.5 or net <= 0:
+            return None
+        return net / days
+
+    @property
+    def remaining_days(self) -> float | None:
+        remaining = self.remaining
+        if remaining is None:
+            return None
+        if remaining <= 0:
+            return 0.0
+        avg = self.daily_average
+        if not avg or avg <= 0:
+            return None
+        return remaining / avg
+
+    @property
+    def payback_date(self):
+        rd = self.remaining_days
+        if rd is None:
+            return None
+        return dt_util.utcnow() + timedelta(days=rd)
+
+
+class BaseManager(MetricsMixin):
     """Gemeinsame Mechanik: Timer, Entitäts-Lesen, Persistenz, Kennzahlen."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -336,65 +420,9 @@ class BaseManager:
         data.update(self._extra_save())
         return data
 
-    # ------------------------------------------------------------------
-    # Gemeinsame Kennzahlen
-    # ------------------------------------------------------------------
-    @property
-    def progress(self) -> float | None:
-        inv = self.investment
-        if not inv or inv <= 0:
-            return None
-        # Bei Speicher-Betrieb kann total_savings vorübergehend unter
-        # initial_credit (sogar unter 0) fallen, wenn in einer Auswertung
-        # geladen, aber nicht entladen wird und die Einspeisevergütung > 0
-        # ist (entgangene Einspeisung wird abgezogen, siehe
-        # StorageManager._async_evaluate). Ohne Untergrenze würde die
-        # Fortschritts-% dann negativ, was für eine Amortisationsanzeige
-        # keinen Sinn ergibt.
-        return max(0.0, min(self.total_savings / inv * 100.0, 100.0))
-
-    @property
-    def remaining(self) -> float | None:
-        inv = self.investment
-        if inv is None:
-            return None
-        return max(inv - self.total_savings, 0.0)
-
-    @property
-    def elapsed_days(self) -> float:
-        if not self.start_time:
-            return 0.0
-        start = dt_util.parse_datetime(self.start_time)
-        if start is None:
-            return 0.0
-        return max((dt_util.utcnow() - start).total_seconds() / 86400.0, 0.0)
-
-    @property
-    def daily_average(self) -> float | None:
-        net = self.total_savings - self.initial_credit
-        days = self.elapsed_days
-        if days < 0.5 or net <= 0:
-            return None
-        return net / days
-
-    @property
-    def remaining_days(self) -> float | None:
-        remaining = self.remaining
-        if remaining is None:
-            return None
-        if remaining <= 0:
-            return 0.0
-        avg = self.daily_average
-        if not avg or avg <= 0:
-            return None
-        return remaining / avg
-
-    @property
-    def payback_date(self):
-        rd = self.remaining_days
-        if rd is None:
-            return None
-        return dt_util.utcnow() + timedelta(days=rd)
+    def breakdown(self) -> list[dict]:
+        """Aufschlüsselung für die Gesamtübersicht (Standard: eine Zeile je Eintrag)."""
+        return [_breakdown_line(self.entry.title, self.entry.data.get("mode"), self.investment, self.total_savings)]
 
     # ------------------------------------------------------------------
     # Von Subklassen zu implementieren
@@ -705,8 +733,8 @@ class DeltaManager(BaseManager):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         super().__init__(hass, entry)
         self.groups: dict[str, dict[str, MonotonicCounter]] = {
-            key: {eid: MonotonicCounter() for eid in self._ids(conf)}
-            for key, conf in self.SENSORS.items()
+            key: {eid: MonotonicCounter() for eid in ids}
+            for key, ids in self._sensor_map().items()
         }
         self.credited: dict[str, float] = {k: 0.0 for k in self.groups}
         self.base: dict[str, float] = {k: 0.0 for k in self.groups}
@@ -716,6 +744,10 @@ class DeltaManager(BaseManager):
     def _ids(self, conf: str) -> list[str]:
         val = self.config[conf]
         return list(val) if isinstance(val, (list, tuple)) else [val]
+
+    def _sensor_map(self) -> dict[str, list[str]]:
+        """Zähler-Gruppen: key -> Entity-IDs (Standard aus SENSORS; Subklassen überschreiben)."""
+        return {key: self._ids(conf) for key, conf in self.SENSORS.items()}
 
     # ------------------------------------------------------------------
     def total(self, key: str) -> float:
@@ -937,3 +969,345 @@ class CombinedManager(DeltaManager):
             entladung_kwh=round(self.kwh("discharge"), 3),
         )
         return attrs
+
+
+class DeviceView(MetricsMixin):
+    """Sicht auf ein einzelnes Gerät einer Anlage (eigene Kosten, Ersparnis, Prognose)."""
+
+    def __init__(self, manager: "PlantManager", key: str) -> None:
+        self.manager = manager
+        self.key = key
+
+    @property
+    def name(self) -> str:
+        return self.manager.device_name(self.key)
+
+    @property
+    def investment(self) -> float | None:
+        return self.manager.device_investment(self.key)
+
+    @property
+    def total_savings(self) -> float:
+        return self.manager.dev_savings[self.key]
+
+    @property
+    def initial_credit(self) -> float:
+        return self.manager.dev_initial[self.key]
+
+    @property
+    def start_time(self) -> str | None:
+        return self.manager.start_time
+
+    def add_listener(self, cb: CALLBACK_TYPE) -> CALLBACK_TYPE:
+        return self.manager.add_listener(cb)
+
+
+class PlantManager(DeltaManager):
+    """Anlage: beliebig viele Erzeuger und Speicher am selben Netzanschluss.
+
+    Gesamt: (Σ Erzeugung − Einspeisung − Σ Ladung + Σ Entladung) × Strompreis
+            + Einspeisung × Vergütung
+
+    Aufteilung je Gerät (Summe = Gesamt):
+      Erzeuger-Pool = (Σ Erzeugung − Einspeisung − Σ Ladung) × Strompreis
+                      + (Einspeisung + Σ Ladung) × Vergütung,
+                      verteilt nach Anteil an der Erzeugung
+      Speicher      = Entladung × Strompreis − Ladung × Vergütung
+    """
+
+    RATES = {
+        "price": (CONF_PRICE_ENTITY, True),
+        "feed_in": (CONF_FEED_IN_ENTITY, False),
+    }
+    PARTS = ("self", "export")
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        self.entry = entry
+        cfg = self.config
+        self.devices: list[dict] = list(cfg.get(CONF_DEVICES, []))
+        self.storages: list[dict] = list(cfg.get(CONF_STORAGES, []))
+        self.prod_keys = [f"prod{i}" for i in range(len(self.devices))]
+        self.sto_keys = [f"sto{j}" for j in range(len(self.storages))]
+        super().__init__(hass, entry)
+        self.dev_savings: dict[str, float] = {k: 0.0 for k in self.prod_keys + self.sto_keys}
+        self.dev_initial: dict[str, float] = dict(self.dev_savings)
+        self.last_inv: dict[str, float] = {}
+        self.views: dict[str, DeviceView] = {
+            k: DeviceView(self, k) for k in self.prod_keys + self.sto_keys
+        }
+
+    # ------------------------------------------------------------------ Geräte
+    def _spec(self, key: str) -> dict:
+        i = int(key[4:] if key.startswith("prod") else key[3:])
+        return self.devices[i] if key.startswith("prod") else self.storages[i]
+
+    def device_name(self, key: str) -> str:
+        return self._spec(key).get("name") or key
+
+    def device_investment(self, key: str) -> float | None:
+        value = self._read_entity(self._spec(key).get(CONF_INVESTMENT_ENTITY))
+        if value is not None:
+            self.last_inv[key] = value
+            return value
+        return self.last_inv.get(key)
+
+    @property
+    def investment(self) -> float | None:
+        values = [self.device_investment(k) for k in self.prod_keys + self.sto_keys]
+        known = [v for v in values if v is not None]
+        return sum(known) if known else None
+
+    def _sensor_map(self) -> dict[str, list[str]]:
+        mapping: dict[str, list[str]] = {}
+        for i, dev in enumerate(self.devices):
+            mapping[f"prod{i}"] = [dev["sensor"]]
+        mapping["export"] = [self.config[CONF_TO_GRID_SENSOR]]
+        for j, st in enumerate(self.storages):
+            mapping[f"chg{j}"] = [st[CONF_CHARGE_SENSOR]]
+            mapping[f"dis{j}"] = [st[CONF_DISCHARGE_SENSOR]]
+        return mapping
+
+    # ------------------------------------------------------------------ Rechnung
+    def _allocate(self, deltas: dict[str, float], rates: dict[str, float]):
+        """kWh-Änderungen -> (Ersparnis je Gerät, Teilsummen)."""
+        price, feed = rates["price"], rates["feed_in"]
+        d_prod = {k: deltas.get(k, 0.0) for k in self.prod_keys}
+        sum_p = sum(d_prod.values())
+        d_exp = deltas.get("export", 0.0)
+        d_chg = {j: deltas.get(f"chg{j}", 0.0) for j in range(len(self.storages))}
+        d_dis = {j: deltas.get(f"dis{j}", 0.0) for j in range(len(self.storages))}
+        sum_c, sum_d = sum(d_chg.values()), sum(d_dis.values())
+
+        pool = (sum_p - d_exp - sum_c) * price + (d_exp + sum_c) * feed
+        if sum_p > 0:
+            shares = {k: d_prod[k] / sum_p for k in self.prod_keys}
+        else:
+            totals = {k: self.kwh(k) for k in self.prod_keys}
+            total_sum = sum(totals.values())
+            if total_sum > 0:
+                shares = {k: totals[k] / total_sum for k in self.prod_keys}
+            else:
+                n = len(self.prod_keys) or 1
+                shares = {k: 1.0 / n for k in self.prod_keys}
+
+        incs = {k: pool * shares[k] for k in self.prod_keys}
+        for j, key in enumerate(self.sto_keys):
+            incs[key] = d_dis[j] * price - d_chg[j] * feed
+        parts = {
+            "self": (sum_p - d_exp - sum_c + sum_d) * price,
+            "export": d_exp * feed,
+        }
+        return incs, parts
+
+    @callback
+    def _async_evaluate(self, now=None) -> None:
+        rates = self._rates()
+        if rates is None:
+            return
+        deltas = {}
+        for key in self.groups:
+            delta = self.total(key) - self.credited[key]
+            if delta > 0:
+                deltas[key] = delta
+        if not deltas:
+            return
+        incs, parts = self._allocate(deltas, rates)
+        for key, value in incs.items():
+            self.dev_savings[key] += value
+            self.total_savings += value
+        for part, value in parts.items():
+            self.parts[part] += value
+        for key in deltas:
+            self.credited[key] = self.total(key)
+        self._schedule_save()
+        self._notify()
+
+    def _compute_initial_credit(self) -> float:
+        euro = float(self.config.get(CONF_INITIAL_SAVINGS, 0) or 0)
+        auto = 0.0
+        if self.config.get(CONF_INITIAL_AUTO):
+            rates = self._rates() or {"price": 0.0, "feed_in": 0.0}
+            deltas = {}
+            for key, group in self.groups.items():
+                self.base[key] = sum(c.initial for c in group.values())
+                deltas[key] = self.base[key]
+            incs, parts = self._allocate(deltas, rates)
+            for key, value in incs.items():
+                self.dev_initial[key] = value
+                self.dev_savings[key] += value
+                auto += value
+            for part, value in parts.items():
+                self.parts[part] += value
+        # Startwert je Gerät (bisher aufgelaufene Ersparnis bei bereits laufenden Anlagen)
+        device_flat = 0.0
+        for key in self.prod_keys + self.sto_keys:
+            flat = float(self._spec(key).get("initial_savings", 0) or 0)
+            if flat:
+                self.dev_initial[key] += flat
+                self.dev_savings[key] += flat
+                device_flat += flat
+        self.credit_breakdown = {
+            "zaehlerstaende_eur": round(auto, 2),
+            "geraete_pauschal_eur": round(device_flat, 2),
+            "pauschal_eur": round(euro, 2),
+        }
+        return euro + auto + device_flat
+
+    # ------------------------------------------------------------------ Persistenz
+    def _restore_counters(self, data: dict) -> None:
+        super()._restore_counters(data)
+        for key in self.dev_savings:
+            self.dev_savings[key] = data.get("dev_savings", {}).get(key, 0.0)
+            self.dev_initial[key] = data.get("dev_initial", {}).get(key, 0.0)
+        self.last_inv = dict(data.get("last_inv", {}))
+
+    def _extra_save(self) -> dict:
+        data = super()._extra_save()
+        data.update(
+            dev_savings=dict(self.dev_savings),
+            dev_initial=dict(self.dev_initial),
+            last_inv=dict(self.last_inv),
+        )
+        return data
+
+    # ------------------------------------------------------------------ Kennzahlen
+    def kwh(self, key: str) -> float:
+        """Zähler-Gesamtwert; production/charge/discharge summieren über alle Geräte."""
+        if key == "production":
+            return sum(super(PlantManager, self).kwh(k) for k in self.prod_keys)
+        if key == "charge":
+            return sum(super(PlantManager, self).kwh(f"chg{j}") for j in range(len(self.storages)))
+        if key == "discharge":
+            return sum(super(PlantManager, self).kwh(f"dis{j}") for j in range(len(self.storages)))
+        return super().kwh(key)
+
+    @property
+    def total_self_consumed(self) -> float:
+        return self.kwh("production") - self.kwh("export")
+
+    @property
+    def roundtrip(self) -> float | None:
+        charged = self.kwh("charge")
+        if charged <= 0:
+            return None
+        return self.kwh("discharge") / charged * 100.0
+
+    @property
+    def flat_credit(self) -> float:
+        return float(self.credit_breakdown.get("pauschal_eur", 0.0))
+
+    def breakdown(self) -> list[dict]:
+        lines = [
+            _breakdown_line(
+                self.device_name(key),
+                "pv" if key.startswith("prod") else "storage",
+                self.device_investment(key),
+                self.dev_savings[key],
+            )
+            for key in self.prod_keys + self.sto_keys
+        ]
+        if self.flat_credit:
+            lines.append(_breakdown_line("Pauschale Startgutschrift", "flat", None, self.flat_credit))
+        return lines
+
+    def attributes(self) -> dict:
+        attrs = super().attributes()
+        attrs["geraete"] = self.breakdown()
+        attrs["erzeugung_kwh"] = round(self.kwh("production"), 3)
+        attrs["einspeisung_kwh"] = round(self.kwh("export"), 3)
+        attrs["ladung_kwh"] = round(self.kwh("charge"), 3)
+        attrs["entladung_kwh"] = round(self.kwh("discharge"), 3)
+        return attrs
+
+
+class OverviewManager(MetricsMixin):
+    """Gesamtübersicht: fasst alle anderen Amortix-Einträge zusammen (inkl. Breakdown)."""
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        self.hass = hass
+        self.entry = entry
+        self._listeners: list[CALLBACK_TYPE] = []
+        self._unsubs: list[CALLBACK_TYPE] = []
+        self._unsub_signal: CALLBACK_TYPE | None = None
+
+    async def async_start(self) -> None:
+        self._unsub_signal = async_dispatcher_connect(
+            self.hass, SIGNAL_MANAGERS_CHANGED, self._rebind
+        )
+        self._rebind()
+
+    @callback
+    def async_stop(self) -> None:
+        if self._unsub_signal:
+            self._unsub_signal()
+            self._unsub_signal = None
+        self._unbind()
+
+    def _unbind(self) -> None:
+        for unsub in self._unsubs:
+            unsub()
+        self._unsubs = []
+
+    @callback
+    def _rebind(self) -> None:
+        """An alle anderen Manager hängen (Einträge können später dazukommen/gehen)."""
+        self._unbind()
+        for manager in self.others():
+            self._unsubs.append(manager.add_listener(self._notify))
+        self._notify()
+
+    def others(self) -> list:
+        managers = self.hass.data.get(DOMAIN, {})
+        return [
+            m for eid, m in managers.items()
+            if eid != self.entry.entry_id and not isinstance(m, OverviewManager)
+        ]
+
+    def add_listener(self, cb: CALLBACK_TYPE) -> CALLBACK_TYPE:
+        self._listeners.append(cb)
+
+        def _remove() -> None:
+            if cb in self._listeners:
+                self._listeners.remove(cb)
+
+        return _remove
+
+    @callback
+    def _notify(self) -> None:
+        for cb in list(self._listeners):
+            cb()
+
+    # ------------------------------------------------------------------
+    @property
+    def investment(self) -> float | None:
+        values = [m.investment for m in self.others()]
+        known = [v for v in values if v is not None]
+        return sum(known) if known else None
+
+    @property
+    def total_savings(self) -> float:
+        return sum(m.total_savings for m in self.others())
+
+    @property
+    def initial_credit(self) -> float:
+        return sum(m.initial_credit for m in self.others())
+
+    @property
+    def start_time(self) -> str | None:
+        times = [m.start_time for m in self.others() if m.start_time]
+        return min(times) if times else None
+
+    def breakdown(self) -> list[dict]:
+        lines: list[dict] = []
+        for manager in self.others():
+            lines.extend(manager.breakdown())
+        return lines
+
+    def attributes(self) -> dict:
+        return {
+            "eintraege": len(self.others()),
+            "startgutschrift_eur": round(self.initial_credit, 2),
+            "einsparung_seit_start_eur": round(self.total_savings - self.initial_credit, 2),
+            "geraete": self.breakdown(),
+            "inbetriebnahme": self.start_time,
+        }

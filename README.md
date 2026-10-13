@@ -17,7 +17,7 @@ A **device-agnostic amortization tracker for Home Assistant**. From cumulative k
 ## Features
 
 - **Device-agnostic** — works with any HA entity that reports cumulative kWh (inverter, wallbox, BMS, ...), no manufacturer integration required.
-- **Six modes** — Direct consumption (balcony/PV without storage), Storage (battery charge/discharge balance), PV with storage combined, Wallbox/EV, Heat pump, and a General comparison for anything else — each with its own sensor set.
+- **Seven modes** — System (large PV, balcony plants and one or more storage units on one grid connection, **cost and payback per device**), Direct consumption, Storage, Wallbox/EV, Heat pump, a General comparison, and an **Overview** that combines all entries with a full breakdown.
 - **Measured, not estimated** — evaluates every 60 seconds against your actual live price/tariff entities, so it stays accurate with dynamic tariffs instead of a flat average.
 - **Multiple production sources** — select several production sensors at once (e.g. balcony + roof PV); they're summed automatically.
 - **Starting credit** — an already-running system can start with its accumulated savings applied, either entered manually or computed automatically from current meter readings.
@@ -59,16 +59,35 @@ Click the button above to add Amortix to HACS, then **Download** and restart Hom
 |------|-------------------|----------|-------------|
 | **Direct use** (balcony/PV without storage) | Production (one or more), export/`to_grid` | Feed-in tariff entity, starting credit | `self-consumption × grid price + export × feed-in tariff` |
 | **Storage** | Charge, discharge | Roundtrip-efficiency sensor, feed-in tariff entity, starting credit | `discharge × grid price − charge × feed-in tariff` |
-| **PV with storage** (combined) | Production (one or more), export, battery charge, battery discharge | Feed-in tariff entity, starting credit | `(production − export − charge + discharge) × grid price + export × feed-in tariff` |
+| **System** | One counter per producer, one export counter, per storage: charge + discharge | Feed-in tariff entity, cost entity per device, starting values | `(Σ production − export − Σ charge + Σ discharge) × grid price + export × feed-in tariff`, split per device (see below) |
 | **Wallbox / EV** | Charged energy | Own price entity, starting credit | `kWh × (reference price − own price)` |
 | **Heat pump** | Heat (kWh), electricity consumption (kWh) | Starting credit | `heat × reference price − electricity × grid price` |
 | **General** | One kWh counter | Own price entity, starting credit | `kWh × (reference price − own price)` |
+| **Overview** | — (uses all other entries) | — | Sum of all entries plus breakdown per device |
 
-All modes also require an **investment cost** entity. Direct use, Storage and PV with storage need a **grid price** entity, Wallbox/General a **reference price** (what the same kWh would otherwise cost, e.g. a public charger or fuel per kWh) and optionally an **own price**, Heat pump a grid price and a **reference price per kWh of heat** (e.g. gas price ÷ boiler efficiency).
+All modes except System (cost per device) and Overview also require an **investment cost** entity. Direct use, Storage and System need a **grid price** entity, Wallbox/General a **reference price** (what the same kWh would otherwise cost, e.g. a public charger or fuel per kWh) and optionally an **own price**, Heat pump a grid price and a **reference price per kWh of heat** (e.g. gas price ÷ boiler efficiency).
 
 All price entities can be an `input_number`, a `number`, or a sensor — **including dynamic tariffs** such as Tibber, which are read live every minute. Prices reported in **ct/kWh are converted to €/kWh automatically**; if a sensor is briefly unavailable, the last known price is used.
 
-**PV with storage in one entry** values every counter on its own at the price valid at that moment, so charging losses cost the grid price automatically, and **charging from the grid** (e.g. at a cheap night tariff) is handled correctly: charging costs at charge time, discharging earns the price valid at discharge time. The new modes accept a starting credit as a flat amount and/or computed automatically from the current meter readings.
+### System: several producers and storage units on one grid connection
+
+Use this mode for anything that shares **one grid connection** — e.g. a large PV system with a DC storage, two balcony plants and, later, an additional AC storage. It avoids a common mistake: the export meter belongs to the whole connection, so separate entries per producer would each subtract the full export.
+
+Setup asks for the production counter of **every producer separately** (each balcony plant on its own), **one** export counter, the grid price, and then — per producer and per storage — a name, the **cost entity** and an optional **starting value**. Add as many storage units as you have (DC or AC; each needs its own charge and discharge counter, and must not be part of the production sensors).
+
+**Total:** `(Σ production − export − Σ charge + Σ discharge) × grid price + export × feed-in tariff`. Every component is valued at the price valid at that moment, so charging losses cost the grid price and **charging from the grid** (cheap night tariff) is handled correctly: charging costs at charge time, discharging earns the price valid at discharge time.
+
+**Split per device** (the parts always add up to the total):
+- The producers share `(Σ production − export − Σ charge) × grid price + (export + Σ charge) × feed-in tariff` **by their share of the production**.
+- Each storage gets `discharge × grid price − charge × feed-in tariff`.
+
+Every device gets its own *Einsparung*, *Amortisation Fortschritt*, *verbleibend*, *Ersparnis pro Tag*, *Restzeit* and *Datum* sensors; the entry's own progress uses the sum of all device costs. Costs can be changed later via **Configure**.
+
+**Starting values for systems that are already running:** enter the savings accrued so far per device (a euro amount per producer/storage). Additionally, the entry can compute a starting credit automatically from the current meter readings (split across the devices like above) and/or take a flat amount. Don't use the automatic credit and a per-device amount for the same energy.
+
+### Overview
+
+Add the **Overview** once to combine **all other Amortix entries**: *Einsparung gesamt* (total savings), *Investition gesamt*, progress, remaining amount, savings per day, remaining time and payback date. The sensor *Einsparung gesamt* carries the full breakdown in its attribute `geraete`: a list with name, type, investment, savings, progress and remaining amount for every device (and one line for flat starting credits). New entries are included automatically.
 
 Requirements for all sensors:
 - **Cumulative kWh meters** (`state_class: total`/`total_increasing`), not watt sensors.
@@ -91,16 +110,26 @@ Requirements for all sensors:
 | `resttage` | Amortisation Restzeit | Estimated days remaining until payback, from the daily average. |
 | `datum` | Amortisation Datum | Estimated payback date/time, from the daily average. |
 
-### PV with storage only
+### System only
 
 | Key | Name | Description |
 |-----|------|--------------|
-| `einsparung` | Einsparung gesamt | Total savings (€) including the starting credit. Attributes: `startgutschrift_eur`, `einsparung_seit_start_eur`, `erzeugung_kwh`, `einspeisung_kwh`, `ladung_kwh`, `entladung_kwh`, `inbetriebnahme`. |
-| `einsparung_netzbezug` | Einsparung Netzbezug | Savings (€) from avoided grid purchase (self-supply incl. battery, minus charging). |
+| `einsparung` | Einsparung gesamt | Total savings (€) including the starting credit. Attributes: `startgutschrift_eur`, `einsparung_seit_start_eur`, `erzeugung_kwh`, `einspeisung_kwh`, `ladung_kwh`, `entladung_kwh`, `geraete` (breakdown per device), `inbetriebnahme`. |
+| `einsparung_netzbezug` | Einsparung Netzbezug | Savings (€) from avoided grid purchase (self-supply incl. batteries, minus charging). |
 | `einsparung_einspeisung` | Einsparung Einspeisung | Revenue (€) from feed-in. |
-| `eigenverbrauch` | Eigenverbrauch gesamt | Production − export (kWh), includes energy that went into the battery. |
-| `erzeugung`, `ladung`, `entladung` | Erzeugung / Ladung / Entladung gesamt | Total energy (kWh). |
-| `roundtrip` | Roundtrip-Wirkungsgrad | `discharge ÷ charge` (%). |
+| `eigenverbrauch` | Eigenverbrauch gesamt | Σ production − export (kWh), includes energy that went into batteries. |
+| `erzeugung`, `ladung`, `entladung` | Erzeugung / Ladung / Entladung gesamt | Total energy (kWh); charge/discharge only if a storage is configured. |
+| `roundtrip` | Roundtrip-Wirkungsgrad | Σ `discharge ÷ Σ charge` (%). |
+| `einsparung_<device>` | Einsparung *Device* | Savings (€) attributed to this producer/storage. Attributes: `investition_eur`, `startgutschrift_eur`, `einsparung_seit_start_eur`. |
+| `fortschritt_<device>`, `verbleibend_<device>`, `tagesschnitt_<device>`, `resttage_<device>`, `datum_<device>` | Amortisation … *Device* | Progress, remaining amount, savings per day, remaining time and payback date per device (need the device's cost entity). |
+
+### Overview only
+
+| Key | Name | Description |
+|-----|------|--------------|
+| `einsparung` | Einsparung gesamt | Sum of the savings of all other entries. Attributes: `eintraege`, `startgutschrift_eur`, `einsparung_seit_start_eur`, `geraete` (list: name, mode, investment, savings, progress, remaining for every device; flat starting credits as one extra line), `inbetriebnahme` (earliest start). |
+| `investition` | Investition gesamt | Sum of all investments (€). |
+| *shared sensors* | | Progress, remaining amount, savings per day, remaining time and payback date for the whole. |
 
 ### Wallbox / EV and General only
 
@@ -151,10 +180,11 @@ Amortix doesn't estimate — it evaluates your configured sensors every 60 secon
 
 ### Limitations
 
-- **Storage: charging from the grid isn't priced.** The storage calculation assumes the battery is charged from your own PV surplus: charged energy only costs the feed-in tariff you would have received. If you also charge from the grid (dynamic tariff, night rate), the cost of that electricity is **not** deducted and the savings are overstated. Use the **PV with storage** mode in that case, which handles grid charging.
+- **Storage: charging from the grid isn't priced.** The storage calculation assumes the battery is charged from your own PV surplus: charged energy only costs the feed-in tariff you would have received. If you also charge from the grid (dynamic tariff, night rate), the cost of that electricity is **not** deducted and the savings are overstated. Use the **System** mode in that case, which handles grid charging.
 - **Projection is linear.** *Savings per day*, *Remaining time* and *Payback date* extrapolate the average since setup. With PV the yield is strongly seasonal, so a start in winter or summer skews the estimate; it becomes more reliable after a full year.
 - **Negative prices.** If the price entity goes negative (dynamic tariffs), self-consumed energy is valued negatively as well.
-- **PV with storage: battery feeding the grid.** If the battery exports to the grid, that energy is part of the export and valued at the feed-in tariff instead of the grid price.
+- **System: battery feeding the grid.** If a battery exports to the grid, that energy is part of the export and valued at the feed-in tariff instead of the grid price.
+- **System: split per device is an allocation.** Producers share the pool by production share (a balcony plant that produces 10 % gets 10 % of the pooled savings); the split is not a measurement per device. Grid charging is part of the total correctly, but in the split it is credited to the storage, so a storage that is also charged from the grid looks better than a PV-only charged one. Don't use the Wallbox *own price* = 0 for PV charging — it would count the same kWh twice; use the grid price.
 - **Meter resets.** A reset that only drops the reading by less than half (e.g. 12 → 8 kWh) is treated as a normal correction and not detected, since treating every moderate dip as a reset would risk counting energy twice.
 - **Sensor units.** Price entities must provide €/kWh (not ct/kWh), energy sensors kWh.
 ---

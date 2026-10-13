@@ -6,10 +6,11 @@
         "menu_options": {
           "direct": "Direct use (balcony/PV without storage)",
           "storage": "Storage (charge/discharge balance)",
-          "combined": "PV with storage (combined)",
           "wallbox": "Wallbox / EV",
           "heatpump": "Heat pump",
-          "generic": "General (custom comparison)"
+          "generic": "General (custom comparison)",
+          "plant": "System (PV, balcony plants, storage – cost per device)",
+          "overview": "Overview (all entries together)"
         }
       },
       "direct": {
@@ -76,34 +77,6 @@
           "initial_price": "Optional. Empty/0 = current price from the price input_number.",
           "initial_feed_in": "Optional. Empty/0 = current tariff from the input_number (or 0).",
           "initial_savings": "Optional. Added on top of the calculated starting credit."
-        }
-      },
-      "combined": {
-        "title": "Set up PV with storage",
-        "description": "A PV and battery system in a single entry.\n\nSavings = (production − export − charge + discharge) × grid price + export × feed-in tariff. Every component is valued individually at the price valid at that moment. Charging losses therefore cost the grid price automatically, and charging from the grid (e.g. at a cheap tariff) is handled correctly: charging costs at charge time, discharging earns the price valid at discharge time.\n\n**Required:**\n- cumulative kWh counters for **production**, **export**, **battery charge** and **battery discharge**\n- purchase cost (whole system) and grid price as entities\n\nLimit: if the battery feeds back into the grid, that is part of the export and is valued at the feed-in tariff.",
-        "data": {
-          "name": "Name",
-          "production_sensor": "PV production (one or more kWh sensors)",
-          "to_grid_sensor": "Export / to_grid",
-          "charge_sensor": "Battery charge (kWh, cumulative)",
-          "discharge_sensor": "Battery discharge (kWh, cumulative)",
-          "investment_entity": "Purchase cost (total)",
-          "price_entity": "Grid electricity price",
-          "feed_in_entity": "Feed-in tariff (optional)",
-          "initial_auto": "Calculate starting credit automatically from current meter readings",
-          "initial_savings": "Starting credit: flat amount in euros"
-        },
-        "data_description": {
-          "name": "Free choice. Determines the names of the created sensors.",
-          "production_sensor": "Cumulative kWh production counters. Several allowed – they are summed.",
-          "to_grid_sensor": "Cumulative kWh export at the grid connection point.",
-          "charge_sensor": "Cumulative kWh counter of battery charging.",
-          "discharge_sensor": "Cumulative kWh counter of battery discharging.",
-          "investment_entity": "Entity with the cost in € (PV and storage together).",
-          "price_entity": "Grid price in €/kWh – dynamic is fine.",
-          "feed_in_entity": "Tariff in €/kWh. Empty = 0.",
-          "initial_auto": "Values the current meter readings at the current prices. ONLY use if the meters hold real, matching history (not a freshly created helper).",
-          "initial_savings": "Optional. Savings accrued so far as a fixed euro amount; added on top."
         }
       },
       "wallbox": {
@@ -173,10 +146,84 @@
           "initial_auto": "Values the current meter readings at the current prices. ONLY use if the meters hold real, matching history (not a freshly created helper).",
           "initial_savings": "Optional. Savings accrued so far as a fixed euro amount; added on top."
         }
+      },
+      "plant": {
+        "title": "Set up system",
+        "description": "For everything on the **same grid connection**: large PV, balcony plants, one or more storage units (DC or AC). Every device gets its own cost and its own payback status.\n\nTotal: `(Σ production − export − Σ charge + Σ discharge) × grid price + export × feed-in tariff`.\nSplit per device: producers share `(Σ production − export − Σ charge) × grid price + (export + Σ charge) × feed-in tariff` by their share of the production, each storage gets `discharge × grid price − charge × feed-in tariff`. The sum is always the total savings.\n\n**Required:**\n- a cumulative kWh counter **per producer** (each balcony plant separately)\n- **one** export counter at the grid connection point (net, for everything together)\n- grid price as an entity (dynamic is fine)\n\nIn the next step you set name, cost and starting value per producer, then the storage units.\n\nStarting credit for systems that are already running: per device as a euro amount, here additionally automatically from the current meter readings and/or as a flat amount. Don't use both for the same energy.",
+        "data": {
+          "name": "System name",
+          "production_sensor": "Production (one sensor per producer)",
+          "to_grid_sensor": "Export / to_grid (for everything together)",
+          "price_entity": "Grid electricity price",
+          "feed_in_entity": "Feed-in tariff (optional)",
+          "initial_auto": "Calculate starting credit automatically from current meter readings",
+          "initial_savings": "Starting credit: flat amount in euros"
+        },
+        "data_description": {
+          "name": "Free choice. Determines the names of the created sensors.",
+          "production_sensor": "Cumulative kWh production counters, e.g. large PV, balcony 1, balcony 2. Each producer separately, not pre-summed.",
+          "to_grid_sensor": "Cumulative kWh export at the grid connection point, one counter for the whole system.",
+          "price_entity": "Grid price in €/kWh – dynamic is fine (ct/kWh is converted).",
+          "feed_in_entity": "Tariff in €/kWh. Empty = 0.",
+          "initial_auto": "Values the current meter readings at the current prices. ONLY use if the meters hold real, matching history (not a freshly created helper).",
+          "initial_savings": "Optional. Savings accrued so far as a fixed euro amount; added on top."
+        }
+      },
+      "plant_device": {
+        "title": "Define producer",
+        "description": "Sensor: **{sensor}**\n\nName and purchase cost of this producer. The starting value is the savings accrued so far for a system that is already running.",
+        "data": {
+          "name": "Name",
+          "investment_entity": "Purchase cost (optional)",
+          "initial_savings": "Starting value: savings so far (€)"
+        },
+        "data_description": {
+          "name": "Free choice, e.g. 'Large PV' or 'Balcony 1'.",
+          "investment_entity": "Entity with the cost in €. Empty = no progress for this device.",
+          "initial_savings": "Optional. Amount saved with this device so far, in €. Don't also use the automatic starting credit for the same energy."
+        }
+      },
+      "plant_storage": {
+        "title": "Define storage",
+        "description": "Own charge and discharge counters, name and cost of this storage. Works for DC and AC storage. The storage must not be part of the production sensors.",
+        "data": {
+          "name": "Name",
+          "charge_sensor": "Charge (kWh, cumulative)",
+          "discharge_sensor": "Discharge (kWh, cumulative)",
+          "investment_entity": "Purchase cost (optional)",
+          "initial_savings": "Starting value: savings so far (€)"
+        },
+        "data_description": {
+          "name": "Free choice, e.g. 'DC storage'.",
+          "charge_sensor": "Cumulative kWh counter of battery charging.",
+          "discharge_sensor": "Cumulative kWh counter of battery discharging.",
+          "investment_entity": "Entity with the cost in €. Empty = no progress for this storage.",
+          "initial_savings": "Optional. Amount saved with this storage so far, in €."
+        }
+      },
+      "plant_more": {
+        "title": "Add a storage?",
+        "menu_options": {
+          "plant_storage": "Add storage (DC or AC)",
+          "plant_finish": "Done"
+        }
+      },
+      "overview": {
+        "title": "Set up overview",
+        "description": "Combines **all other Amortix entries**: total savings, total investment, progress, remaining time and a breakdown per device (as attribute `geraete` of the \"Einsparung gesamt\" sensor). New entries are included automatically. There can only be one overview.",
+        "data": {
+          "name": "Name"
+        },
+        "data_description": {
+          "name": "Free choice."
+        }
       }
     },
     "error": {
       "same_sensor": "Every sensor may only be chosen once (e.g. export must not be among the production sensors)."
+    },
+    "abort": {
+      "overview_exists": "There is already an overview."
     }
   },
   "options": {
@@ -198,7 +245,52 @@
           "reference_price_entity": "What the same kWh would otherwise cost, in €/kWh.",
           "own_price_entity": "What the kWh actually costs you, in €/kWh. Empty = 0."
         }
+      },
+      "plant": {
+        "title": "Adjust system",
+        "description": "Sensors, names and starting values stay unchanged; only prices and costs here.\n\nDevices: {devices}",
+        "data": {
+          "price_entity": "Grid electricity price",
+          "feed_in_entity": "Feed-in tariff (optional)",
+          "device_1_investment": "Cost of device 1",
+          "device_2_investment": "Cost of device 2",
+          "device_3_investment": "Cost of device 3",
+          "device_4_investment": "Cost of device 4",
+          "device_5_investment": "Cost of device 5",
+          "device_6_investment": "Cost of device 6",
+          "device_7_investment": "Cost of device 7",
+          "device_8_investment": "Cost of device 8",
+          "device_9_investment": "Cost of device 9",
+          "device_10_investment": "Cost of device 10",
+          "storage_1_investment": "Cost of storage 1",
+          "storage_2_investment": "Cost of storage 2",
+          "storage_3_investment": "Cost of storage 3",
+          "storage_4_investment": "Cost of storage 4",
+          "storage_5_investment": "Cost of storage 5"
+        },
+        "data_description": {
+          "price_entity": "Grid price in €/kWh – dynamic is fine.",
+          "feed_in_entity": "Tariff in €/kWh. Empty = 0.",
+          "device_1_investment": "Entity with the purchase cost of this device in €. Empty = no cost, then this device has no progress.",
+          "device_2_investment": "Entity with the purchase cost of this device in €. Empty = no cost, then this device has no progress.",
+          "device_3_investment": "Entity with the purchase cost of this device in €. Empty = no cost, then this device has no progress.",
+          "device_4_investment": "Entity with the purchase cost of this device in €. Empty = no cost, then this device has no progress.",
+          "device_5_investment": "Entity with the purchase cost of this device in €. Empty = no cost, then this device has no progress.",
+          "device_6_investment": "Entity with the purchase cost of this device in €. Empty = no cost, then this device has no progress.",
+          "device_7_investment": "Entity with the purchase cost of this device in €. Empty = no cost, then this device has no progress.",
+          "device_8_investment": "Entity with the purchase cost of this device in €. Empty = no cost, then this device has no progress.",
+          "device_9_investment": "Entity with the purchase cost of this device in €. Empty = no cost, then this device has no progress.",
+          "device_10_investment": "Entity with the purchase cost of this device in €. Empty = no cost, then this device has no progress.",
+          "storage_1_investment": "Entity with the purchase cost of this storage in €. Empty = no cost.",
+          "storage_2_investment": "Entity with the purchase cost of this storage in €. Empty = no cost.",
+          "storage_3_investment": "Entity with the purchase cost of this storage in €. Empty = no cost.",
+          "storage_4_investment": "Entity with the purchase cost of this storage in €. Empty = no cost.",
+          "storage_5_investment": "Entity with the purchase cost of this storage in €. Empty = no cost."
+        }
       }
+    },
+    "abort": {
+      "no_options": "The overview has no settings."
     }
   }
 }

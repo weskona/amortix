@@ -6,10 +6,11 @@
         "menu_options": {
           "direct": "Direktverbrauch (BKW/PV ohne Speicher)",
           "storage": "Speicher (Lade-/Entladebilanz)",
-          "combined": "PV mit Speicher (kombiniert)",
           "wallbox": "Wallbox / E-Auto",
           "heatpump": "Wärmepumpe",
-          "generic": "Allgemein (eigener Vergleich)"
+          "generic": "Allgemein (eigener Vergleich)",
+          "plant": "Anlage (PV, Balkonkraftwerke, Speicher – Kosten je Gerät)",
+          "overview": "Gesamtübersicht (alle Einträge zusammen)"
         }
       },
       "direct": {
@@ -76,34 +77,6 @@
           "initial_price": "Optional. Leer/0 = aktueller Preis aus der Strompreis-input_number.",
           "initial_feed_in": "Optional. Leer/0 = aktuelle Vergütung aus der input_number (bzw. 0).",
           "initial_savings": "Optional. Wird zusätzlich zur berechneten Startgutschrift addiert."
-        }
-      },
-      "combined": {
-        "title": "PV mit Speicher einrichten",
-        "description": "Eine Anlage aus PV und Batterie in einem Eintrag.\n\nErsparnis = (Erzeugung − Einspeisung − Ladung + Entladung) × Strompreis + Einspeisung × Vergütung. Jede Komponente wird einzeln zum jeweils aktuellen Preis bewertet. Ladeverluste kosten dadurch automatisch den Strompreis; auch Laden aus dem Netz (z. B. bei günstigem Tarif) ist korrekt abgebildet: Die Ladung kostet beim Laden, die Entladung bringt beim Entladen den dann gültigen Preis.\n\n**Benötigt:**\n- kumulierende kWh-Zähler für **Erzeugung**, **Einspeisung**, **Batterie-Ladung** und **Batterie-Entladung**\n- Anschaffungskosten (gesamte Anlage) und Strompreis als Entität\n\nGrenze: Speist der Speicher ins Netz zurück, ist das in der Einspeisung enthalten und wird mit der Vergütung bewertet.",
-        "data": {
-          "name": "Name",
-          "production_sensor": "PV-Erzeugung (ein oder mehrere kWh-Sensoren)",
-          "to_grid_sensor": "Einspeisung / to_grid",
-          "charge_sensor": "Batterie-Ladung (kWh, kumulierend)",
-          "discharge_sensor": "Batterie-Entladung (kWh, kumulierend)",
-          "investment_entity": "Anschaffungskosten (gesamt)",
-          "price_entity": "Strompreis Netzbezug",
-          "feed_in_entity": "Einspeisevergütung (optional)",
-          "initial_auto": "Startgutschrift automatisch aus aktuellen Zählerständen berechnen",
-          "initial_savings": "Startgutschrift: pauschaler Euro-Betrag"
-        },
-        "data_description": {
-          "name": "Frei wählbar. Bestimmt die Namen der erzeugten Sensoren.",
-          "production_sensor": "Kumulierende kWh-Zähler der Erzeugung. Mehrere wählbar – sie werden summiert.",
-          "to_grid_sensor": "Kumulierende kWh-Einspeisung am Netzübergabepunkt.",
-          "charge_sensor": "Kumulierender kWh-Zähler der Batterie-Ladung.",
-          "discharge_sensor": "Kumulierender kWh-Zähler der Batterie-Entladung.",
-          "investment_entity": "Entität mit den Kosten in € (PV und Speicher zusammen).",
-          "price_entity": "Netzbezugspreis in €/kWh – auch dynamisch.",
-          "feed_in_entity": "Vergütung in €/kWh. Leer = 0.",
-          "initial_auto": "Bewertet die aktuellen Zählerstände mit den aktuellen Preisen. NUR verwenden, wenn die Zähler echte, zusammengehörige Historie haben (kein frisch erstellter Helfer).",
-          "initial_savings": "Optional. Bisher aufgelaufene Ersparnis als fester Euro-Betrag; wird zusätzlich addiert."
         }
       },
       "wallbox": {
@@ -173,10 +146,84 @@
           "initial_auto": "Bewertet die aktuellen Zählerstände mit den aktuellen Preisen. NUR verwenden, wenn die Zähler echte, zusammengehörige Historie haben (kein frisch erstellter Helfer).",
           "initial_savings": "Optional. Bisher aufgelaufene Ersparnis als fester Euro-Betrag; wird zusätzlich addiert."
         }
+      },
+      "plant": {
+        "title": "Anlage einrichten",
+        "description": "Für alles, was am **selben Netzanschluss** hängt: große PV, Balkonkraftwerke, ein oder mehrere Speicher (DC oder AC). Jedes Gerät bekommt eigene Kosten und einen eigenen Amortisationsstand.\n\nGesamt: `(Σ Erzeugung − Einspeisung − Σ Ladung + Σ Entladung) × Strompreis + Einspeisung × Vergütung`.\nAufteilung je Gerät: Die Erzeuger teilen sich `(Σ Erzeugung − Einspeisung − Σ Ladung) × Strompreis + (Einspeisung + Σ Ladung) × Vergütung` nach ihrem Anteil an der Erzeugung, jeder Speicher bekommt `Entladung × Strompreis − Ladung × Vergütung`. Die Summe ergibt immer die Gesamtersparnis.\n\n**Benötigt:**\n- kumulierende kWh-Zähler **je Erzeuger** (jedes Balkonkraftwerk einzeln)\n- **eine** Einspeisung am Netzübergabepunkt (saldiert, für alles zusammen)\n- Strompreis als Entität (auch dynamisch)\n\nIm nächsten Schritt legst du je Erzeuger Name, Kosten und Startwert fest, danach die Speicher.\n\nStartgutschrift für bereits laufende Anlagen: je Gerät als Euro-Betrag, hier zusätzlich automatisch aus den aktuellen Zählerständen und/oder pauschal. Nicht beides für dieselbe Energie verwenden.",
+        "data": {
+          "name": "Name der Anlage",
+          "production_sensor": "Erzeugung (ein Sensor je Erzeuger)",
+          "to_grid_sensor": "Einspeisung / to_grid (für alles zusammen)",
+          "price_entity": "Strompreis Netzbezug",
+          "feed_in_entity": "Einspeisevergütung (optional)",
+          "initial_auto": "Startgutschrift automatisch aus aktuellen Zählerständen berechnen",
+          "initial_savings": "Startgutschrift: pauschaler Euro-Betrag"
+        },
+        "data_description": {
+          "name": "Frei wählbar. Bestimmt die Namen der erzeugten Sensoren.",
+          "production_sensor": "Kumulierende kWh-Zähler der Erzeugung, z. B. große PV, BKW 1, BKW 2. Jeder Erzeuger einzeln, nicht vorab summiert.",
+          "to_grid_sensor": "Kumulierende kWh-Einspeisung am Netzübergabepunkt, ein Zähler für die ganze Anlage.",
+          "price_entity": "Netzbezugspreis in €/kWh – auch dynamisch (ct/kWh wird umgerechnet).",
+          "feed_in_entity": "Vergütung in €/kWh. Leer = 0.",
+          "initial_auto": "Bewertet die aktuellen Zählerstände mit den aktuellen Preisen. NUR verwenden, wenn die Zähler echte, zusammengehörige Historie haben (kein frisch erstellter Helfer).",
+          "initial_savings": "Optional. Bisher aufgelaufene Ersparnis als fester Euro-Betrag; wird zusätzlich addiert."
+        }
+      },
+      "plant_device": {
+        "title": "Erzeuger festlegen",
+        "description": "Sensor: **{sensor}**\n\nName und Anschaffungskosten dieses Erzeugers. Der Startwert ist die bisher aufgelaufene Ersparnis bei einer bereits laufenden Anlage.",
+        "data": {
+          "name": "Name",
+          "investment_entity": "Anschaffungskosten (optional)",
+          "initial_savings": "Startwert: bisherige Ersparnis (€)"
+        },
+        "data_description": {
+          "name": "Frei wählbar, z. B. 'Große PV' oder 'BKW 1'.",
+          "investment_entity": "Entität mit den Kosten in €. Leer = kein Fortschritt für dieses Gerät.",
+          "initial_savings": "Optional. Bisher mit diesem Gerät eingesparter Betrag in €. Nicht zusätzlich die automatische Startgutschrift für dieselbe Energie verwenden."
+        }
+      },
+      "plant_storage": {
+        "title": "Speicher festlegen",
+        "description": "Eigene Lade- und Entlade-Zähler, Name und Kosten dieses Speichers. Funktioniert für DC- und AC-Speicher. Der Speicher darf nicht in den Erzeugungssensoren stecken.",
+        "data": {
+          "name": "Name",
+          "charge_sensor": "Ladung (kWh, kumulierend)",
+          "discharge_sensor": "Entladung (kWh, kumulierend)",
+          "investment_entity": "Anschaffungskosten (optional)",
+          "initial_savings": "Startwert: bisherige Ersparnis (€)"
+        },
+        "data_description": {
+          "name": "Frei wählbar, z. B. 'DC-Speicher'.",
+          "charge_sensor": "Kumulierender kWh-Zähler der Batterie-Ladung.",
+          "discharge_sensor": "Kumulierender kWh-Zähler der Batterie-Entladung.",
+          "investment_entity": "Entität mit den Kosten in €. Leer = kein Fortschritt für diesen Speicher.",
+          "initial_savings": "Optional. Bisher mit diesem Speicher eingesparter Betrag in €."
+        }
+      },
+      "plant_more": {
+        "title": "Speicher hinzufügen?",
+        "menu_options": {
+          "plant_storage": "Speicher hinzufügen (DC oder AC)",
+          "plant_finish": "Fertig"
+        }
+      },
+      "overview": {
+        "title": "Gesamtübersicht einrichten",
+        "description": "Fasst **alle anderen Amortix-Einträge** zusammen: Gesamtersparnis, Gesamtinvestition, Fortschritt, Restzeit und eine Aufschlüsselung je Gerät (als Attribut `geraete` des Sensors „Einsparung gesamt\"). Neue Einträge werden automatisch einbezogen. Es kann nur eine Gesamtübersicht geben.",
+        "data": {
+          "name": "Name"
+        },
+        "data_description": {
+          "name": "Frei wählbar."
+        }
       }
     },
     "error": {
       "same_sensor": "Jeder Sensor darf nur einmal gewählt werden (z. B. darf die Einspeisung nicht zu den Erzeugungssensoren gehören)."
+    },
+    "abort": {
+      "overview_exists": "Es gibt bereits eine Gesamtübersicht."
     }
   },
   "options": {
@@ -198,7 +245,52 @@
           "reference_price_entity": "Was dieselbe kWh sonst kosten würde, in €/kWh.",
           "own_price_entity": "Was die kWh dich tatsächlich kostet, in €/kWh. Leer = 0."
         }
+      },
+      "plant": {
+        "title": "Anlage anpassen",
+        "description": "Sensoren, Namen und Startwerte bleiben unverändert; hier nur Preise und Kosten.\n\nGeräte: {devices}",
+        "data": {
+          "price_entity": "Strompreis Netzbezug",
+          "feed_in_entity": "Einspeisevergütung (optional)",
+          "device_1_investment": "Kosten Gerät 1",
+          "device_2_investment": "Kosten Gerät 2",
+          "device_3_investment": "Kosten Gerät 3",
+          "device_4_investment": "Kosten Gerät 4",
+          "device_5_investment": "Kosten Gerät 5",
+          "device_6_investment": "Kosten Gerät 6",
+          "device_7_investment": "Kosten Gerät 7",
+          "device_8_investment": "Kosten Gerät 8",
+          "device_9_investment": "Kosten Gerät 9",
+          "device_10_investment": "Kosten Gerät 10",
+          "storage_1_investment": "Kosten Speicher 1",
+          "storage_2_investment": "Kosten Speicher 2",
+          "storage_3_investment": "Kosten Speicher 3",
+          "storage_4_investment": "Kosten Speicher 4",
+          "storage_5_investment": "Kosten Speicher 5"
+        },
+        "data_description": {
+          "price_entity": "Netzbezugspreis in €/kWh – auch dynamisch.",
+          "feed_in_entity": "Vergütung in €/kWh. Leer = 0.",
+          "device_1_investment": "Entität mit den Anschaffungskosten dieses Geräts in €. Leer = keine Kosten, dann gibt es keinen Fortschritt für dieses Gerät.",
+          "device_2_investment": "Entität mit den Anschaffungskosten dieses Geräts in €. Leer = keine Kosten, dann gibt es keinen Fortschritt für dieses Gerät.",
+          "device_3_investment": "Entität mit den Anschaffungskosten dieses Geräts in €. Leer = keine Kosten, dann gibt es keinen Fortschritt für dieses Gerät.",
+          "device_4_investment": "Entität mit den Anschaffungskosten dieses Geräts in €. Leer = keine Kosten, dann gibt es keinen Fortschritt für dieses Gerät.",
+          "device_5_investment": "Entität mit den Anschaffungskosten dieses Geräts in €. Leer = keine Kosten, dann gibt es keinen Fortschritt für dieses Gerät.",
+          "device_6_investment": "Entität mit den Anschaffungskosten dieses Geräts in €. Leer = keine Kosten, dann gibt es keinen Fortschritt für dieses Gerät.",
+          "device_7_investment": "Entität mit den Anschaffungskosten dieses Geräts in €. Leer = keine Kosten, dann gibt es keinen Fortschritt für dieses Gerät.",
+          "device_8_investment": "Entität mit den Anschaffungskosten dieses Geräts in €. Leer = keine Kosten, dann gibt es keinen Fortschritt für dieses Gerät.",
+          "device_9_investment": "Entität mit den Anschaffungskosten dieses Geräts in €. Leer = keine Kosten, dann gibt es keinen Fortschritt für dieses Gerät.",
+          "device_10_investment": "Entität mit den Anschaffungskosten dieses Geräts in €. Leer = keine Kosten, dann gibt es keinen Fortschritt für dieses Gerät.",
+          "storage_1_investment": "Entität mit den Anschaffungskosten dieses Speichers in €. Leer = keine Kosten.",
+          "storage_2_investment": "Entität mit den Anschaffungskosten dieses Speichers in €. Leer = keine Kosten.",
+          "storage_3_investment": "Entität mit den Anschaffungskosten dieses Speichers in €. Leer = keine Kosten.",
+          "storage_4_investment": "Entität mit den Anschaffungskosten dieses Speichers in €. Leer = keine Kosten.",
+          "storage_5_investment": "Entität mit den Anschaffungskosten dieses Speichers in €. Leer = keine Kosten."
+        }
       }
+    },
+    "abort": {
+      "no_options": "Die Gesamtübersicht hat keine Einstellungen."
     }
   }
 }

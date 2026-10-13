@@ -18,7 +18,9 @@ from .const import (
     MODE_DIRECT,
     MODE_GENERIC,
     MODE_HEATPUMP,
+    MODE_OVERVIEW,
     MODE_STORAGE,
+    MODE_PLANT,
     MODE_WALLBOX,
 )
 
@@ -32,15 +34,36 @@ async def async_setup_entry(
     mode = entry.data.get(CONF_MODE, MODE_DIRECT)
 
     # gemeinsame Kennzahlen-Sensoren
-    common = [
-        ProgressSensor(manager, entry),
-        RemainingSensor(manager, entry),
-        DailyAverageSensor(manager, entry),
-        RemainingDaysSensor(manager, entry),
-        PaybackDateSensor(manager, entry),
-    ]
+    common = _metric_sensors(manager, entry)
 
-    if mode == MODE_COMBINED:
+    if mode == MODE_OVERVIEW:
+        async_add_entities(
+            [
+                OverviewSavingsSensor(manager, entry),
+                OverviewInvestmentSensor(manager, entry),
+                *common,
+            ]
+        )
+        return
+
+    if mode == MODE_PLANT:
+        specific = [
+            DeltaSavingsSensor(manager, entry),
+            PartSavingsSensor(manager, entry, "self", "einsparung_netzbezug", "Einsparung Netzbezug", "mdi:transmission-tower-import"),
+            PartSavingsSensor(manager, entry, "export", "einsparung_einspeisung", "Einsparung Einspeisung", "mdi:transmission-tower-export"),
+            SelfConsumptionSensor(manager, entry),
+            DeltaEnergySensor(manager, entry, "production", "erzeugung", "Erzeugung gesamt", "mdi:solar-power"),
+        ]
+        if manager.storages:
+            specific += [
+                DeltaEnergySensor(manager, entry, "charge", "ladung", "Ladung gesamt", "mdi:battery-arrow-up"),
+                DeltaEnergySensor(manager, entry, "discharge", "entladung", "Entladung gesamt", "mdi:battery-arrow-down"),
+                RoundtripSensor(manager, entry),
+            ]
+        for key, view in manager.views.items():
+            specific.append(DeviceSavingsSensor(view, entry, key))
+            specific += _metric_sensors(view, entry, suffix=f"_{key}", label=view.name)
+    elif mode == MODE_COMBINED:
         specific = [
             DeltaSavingsSensor(manager, entry),
             PartSavingsSensor(manager, entry, "self", "einsparung_netzbezug", "Einsparung Netzbezug", "mdi:transmission-tower-import"),
@@ -83,14 +106,27 @@ async def async_setup_entry(
     async_add_entities(specific + common)
 
 
+def _metric_sensors(source, entry, suffix: str = "", label: str = "") -> list:
+    """Fortschritt/Restbetrag/Prognose-Sensoren für einen Manager oder eine Gerätesicht."""
+    return [
+        ProgressSensor(source, entry, suffix, label),
+        RemainingSensor(source, entry, suffix, label),
+        DailyAverageSensor(source, entry, suffix, label),
+        RemainingDaysSensor(source, entry, suffix, label),
+        PaybackDateSensor(source, entry, suffix, label),
+    ]
+
+
 class _BaseSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_should_poll = False
     _key: str = ""
 
-    def __init__(self, manager, entry: ConfigEntry) -> None:
+    def __init__(self, manager, entry: ConfigEntry, suffix: str = "", label: str = "") -> None:
         self.manager = manager
-        self._attr_unique_id = f"{entry.entry_id}_{self._key}"
+        if label:
+            self._attr_name = f"{self._attr_name} {label}"
+        self._attr_unique_id = f"{entry.entry_id}_{self._key}{suffix}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.title,
@@ -382,4 +418,63 @@ class CopSensor(_BaseSensor):
     @property
     def native_value(self):
         v = self.manager.cop
+        return round(v, 2) if v is not None else None
+
+
+class DeviceSavingsSensor(_BaseSensor):
+    _key = "einsparung"
+    _attr_name = "Einsparung"
+    _attr_icon = "mdi:cash-multiple"
+    _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, view, entry, key) -> None:
+        super().__init__(view, entry, suffix=f"_{key}", label=view.name)
+
+    @property
+    def native_value(self):
+        return round(self.manager.total_savings, 2)
+
+    @property
+    def extra_state_attributes(self):
+        v = self.manager
+        inv = v.investment
+        return {
+            "investition_eur": round(inv, 2) if inv is not None else None,
+            "startgutschrift_eur": round(v.initial_credit, 2),
+            "einsparung_seit_start_eur": round(v.total_savings - v.initial_credit, 2),
+        }
+
+
+class OverviewSavingsSensor(_BaseSensor):
+    _key = "einsparung"
+    _attr_name = "Einsparung gesamt"
+    _attr_icon = "mdi:cash-multiple"
+    _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_suggested_display_precision = 2
+
+    @property
+    def native_value(self):
+        return round(self.manager.total_savings, 2)
+
+    @property
+    def extra_state_attributes(self):
+        return self.manager.attributes()
+
+
+class OverviewInvestmentSensor(_BaseSensor):
+    _key = "investition"
+    _attr_name = "Investition gesamt"
+    _attr_icon = "mdi:cash-minus"
+    _attr_native_unit_of_measurement = "€"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_suggested_display_precision = 2
+
+    @property
+    def native_value(self):
+        v = self.manager.investment
         return round(v, 2) if v is not None else None

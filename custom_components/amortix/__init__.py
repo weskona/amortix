@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import (
     CONF_MODE,
@@ -11,16 +12,21 @@ from .const import (
     MODE_DIRECT,
     MODE_GENERIC,
     MODE_HEATPUMP,
+    MODE_OVERVIEW,
     MODE_STORAGE,
+    MODE_PLANT,
     MODE_WALLBOX,
     PLATFORMS,
+    SIGNAL_MANAGERS_CHANGED,
 )
 from .coordinator import (
     CombinedManager,
     DirectManager,
     GenericManager,
     HeatPumpManager,
+    OverviewManager,
     StorageManager,
+    PlantManager,
 )
 
 MANAGERS = {
@@ -30,6 +36,8 @@ MANAGERS = {
     MODE_WALLBOX: GenericManager,
     MODE_GENERIC: GenericManager,
     MODE_HEATPUMP: HeatPumpManager,
+    MODE_PLANT: PlantManager,
+    MODE_OVERVIEW: OverviewManager,
 }
 
 
@@ -54,6 +62,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
+    async_dispatcher_send(hass, SIGNAL_MANAGERS_CHANGED)
     return True
 
 
@@ -63,6 +72,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         manager = hass.data[DOMAIN].pop(entry.entry_id, None)
         if manager is not None:
             manager.async_stop()
+        async_dispatcher_send(hass, SIGNAL_MANAGERS_CHANGED)
     return unload_ok
 
 

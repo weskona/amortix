@@ -7,7 +7,9 @@ PLATFORMS = ["sensor"]
 CONF_MODE = "mode"
 MODE_DIRECT = "direct"     # Direktverbrauch (BKW/PV ohne Speicher)
 MODE_STORAGE = "storage"   # Speicher (Lade-/Entladebilanz)
-MODE_COMBINED = "combined"   # PV + Speicher in einem Eintrag
+MODE_COMBINED = "combined"   # PV + Speicher in einem Eintrag (alt, nur noch für bestehende Einträge)
+MODE_PLANT = "plant"        # Anlage: beliebig viele Erzeuger und Speicher, Kosten je Gerät
+MODE_OVERVIEW = "overview"   # Gesamtübersicht über alle Amortix-Einträge
 MODE_WALLBOX = "wallbox"     # Wallbox / E-Auto
 MODE_HEATPUMP = "heatpump"   # Wärmepumpe
 MODE_GENERIC = "generic"     # Allgemein: kWh-Zähler gegen Vergleichspreis
@@ -25,6 +27,10 @@ CONF_ROUNDTRIP_ENTITY = "roundtrip_entity"     # optional: vorhandener η-Sensor
 CONF_ENERGY_SENSOR = "energy_sensor"           # geladene/verbrauchte kWh
 CONF_HEAT_SENSOR = "heat_sensor"               # erzeugte Wärme (kWh)
 CONF_ELECTRIC_SENSOR = "electric_sensor"       # Stromverbrauch der Wärmepumpe (kWh)
+
+# Anlage (Modus system): Geräteliste
+CONF_DEVICES = "devices"        # [{sensor, name, investment_entity}] je Erzeuger
+CONF_STORAGES = "storages"      # [{name, charge_sensor, discharge_sensor, investment_entity}]
 
 # Live-Werte (Entität: input_number oder Sensor)
 CONF_INVESTMENT_ENTITY = "investment_entity"   # Anschaffungskosten (€)        Pflicht
@@ -44,6 +50,8 @@ CONF_INITIAL_FEED_IN = "initial_feed_in"           # bisherige Ø-Vergütung (op
 CONF_INITIAL_SAVINGS = "initial_savings"           # pauschaler Euro-Betrag zusätzlich
 
 EVALUATION_INTERVAL = 60  # Sekunden
+
+SIGNAL_MANAGERS_CHANGED = "amortix_managers_changed"
 
 STORAGE_VERSION = 1
 SAVE_DELAY = 15

@@ -27,6 +27,25 @@ if "homeassistant" not in sys.modules:
         callback=lambda f: f,
     )
     _module("homeassistant.helpers")
+
+    class _Attr:
+        def __getattr__(self, name):
+            return name
+
+    _module("homeassistant.components")
+    _module(
+        "homeassistant.components.sensor",
+        SensorDeviceClass=_Attr(),
+        SensorEntity=object,
+        SensorStateClass=_Attr(),
+    )
+    _module("homeassistant.helpers.device_registry", DeviceInfo=dict)
+    _module("homeassistant.helpers.entity_platform", AddEntitiesCallback=object)
+    _module(
+        "homeassistant.helpers.dispatcher",
+        async_dispatcher_connect=MagicMock(return_value=lambda: None),
+        async_dispatcher_send=MagicMock(),
+    )
     _module(
         "homeassistant.helpers.event",
         async_track_state_change_event=MagicMock(),
