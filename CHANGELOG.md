@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Direct use** mode values production and feed-in as separate meters (like the other modes), so the result no longer depends on which sensor updates first; with dynamic tariffs a briefly lagging feed-in sensor no longer books too much self-consumption. The total formula is unchanged and existing entries migrate automatically.
+- **System** mode reports no investment (and no progress) while a configured cost entity has never been readable, instead of a too-low partial sum.
+
 ### Fixed
 - **System** mode: per-device starting values were booked twice when the automatic starting credit was still pending across a Home Assistant restart.
 - The current state is now written immediately when an entry is unloaded or reloaded (e.g. after changing options), instead of waiting for the delayed save.

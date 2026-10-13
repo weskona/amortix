@@ -57,10 +57,15 @@ RESET_DROP_RATIO = 0.5
 RESET_GUARD_UPDATES = 3
 
 
+def _progress_pct(savings: float, investment: float) -> float:
+    """Fortschritt in %, auf 0–100 begrenzt (Ersparnis kann vorübergehend negativ sein)."""
+    return max(0.0, min(savings / investment * 100.0, 100.0))
+
+
 def _breakdown_line(name: str, mode: str | None, investment: float | None, savings: float) -> dict:
     progress = None
     if investment and investment > 0:
-        progress = round(max(0.0, min(savings / investment * 100.0, 100.0)), 1)
+        progress = round(_progress_pct(savings, investment), 1)
     return {
         "name": name,
         "mode": mode,
@@ -166,7 +171,7 @@ class MetricsMixin:
         # StorageManager._async_evaluate). Ohne Untergrenze würde die
         # Fortschritts-% dann negativ, was für eine Amortisationsanzeige
         # keinen Sinn ergibt.
-        return max(0.0, min(self.total_savings / inv * 100.0, 100.0))
+        return _progress_pct(self.total_savings, inv)
 
     @property
     def remaining(self) -> float | None:
@@ -396,7 +401,7 @@ class BaseManager(MetricsMixin):
 
     @callback
     def _notify(self) -> None:
-        for cb in self._listeners:
+        for cb in list(self._listeners):
             cb()
 
     @callback
@@ -481,7 +486,8 @@ class DirectManager(BaseManager):
             eid: MonotonicCounter() for eid in self._production_ids()
         }
         self.grid = MonotonicCounter()
-        self.credited_self: float = 0.0
+        # bereits bewertete kWh je Zähler (Erzeugung gesamt / Einspeisung)
+        self.credited_prod: float = 0.0
         self.credited_grid: float = 0.0
         # aufgeteilte Einsparung (parallel zur Gesamtsumme)
         self.savings_self: float = 0.0     # durch Eigenverbrauch (Netzbezug gespart)
@@ -527,8 +533,12 @@ class DirectManager(BaseManager):
                     data.get("prod_raw_last"), data.get("prod_total", 0.0)
                 )
         self.grid.restore(data.get("grid_raw_last"), data.get("grid_total", 0.0))
-        self.credited_self = data.get("credited_self", 0.0)
         self.credited_grid = data.get("credited_grid", 0.0)
+        if "credited_prod" in data:
+            self.credited_prod = data["credited_prod"]
+        else:
+            # Stand vor 'credited_prod': credited_self = Erzeugung − Einspeisung
+            self.credited_prod = data.get("credited_self", 0.0) + self.credited_grid
         self.base_self = data.get("base_self", 0.0)
         self.base_export = data.get("base_export", 0.0)
         self.base_produced = data.get("base_produced", 0.0)
@@ -547,7 +557,7 @@ class DirectManager(BaseManager):
             },
             "grid_raw_last": self.grid.raw_last,
             "grid_total": self.grid.total,
-            "credited_self": self.credited_self,
+            "credited_prod": self.credited_prod,
             "credited_grid": self.credited_grid,
             "base_self": self.base_self,
             "base_export": self.base_export,
@@ -559,6 +569,11 @@ class DirectManager(BaseManager):
     @property
     def total_produced(self) -> float:
         return self.base_produced + self._prod_total()
+
+    @property
+    def credited_self(self) -> float:
+        """Bisher bewerteter Eigenverbrauch (Erzeugung − Einspeisung)."""
+        return self.credited_prod - self.credited_grid
 
     @property
     def total_self_consumed(self) -> float:
@@ -573,20 +588,25 @@ class DirectManager(BaseManager):
         price = self._current_price()
         if price is None:
             return
-        raw_self = self._prod_total() - self.grid.total
-        delta_self = raw_self - self.credited_self
-        if delta_self > 0:
-            value = delta_self * price
+        # Jeder Zähler wird einzeln bewertet (wie im DeltaManager): Erzeugung zum
+        # Strompreis, Einspeisung als Umbuchung zur Vergütung. Dadurch ist die
+        # Summe unabhängig davon, welcher Sensor zuerst aktualisiert wird.
+        prod_total = self._prod_total()
+        delta_prod = prod_total - self.credited_prod
+        if delta_prod > 0:
+            value = delta_prod * price
             self.total_savings += value
             self.savings_self += value
-            self.credited_self = raw_self
+            self.credited_prod = prod_total
         delta_grid = self.grid.total - self.credited_grid
         if delta_grid > 0:
-            value = delta_grid * self._current_feed_in()
-            self.total_savings += value
-            self.savings_export += value
+            moved = delta_grid * price
+            earned = delta_grid * self._current_feed_in()
+            self.total_savings += earned - moved
+            self.savings_self -= moved
+            self.savings_export += earned
             self.credited_grid = self.grid.total
-        if delta_self > 0 or delta_grid > 0:
+        if delta_prod > 0 or delta_grid > 0:
             self._schedule_save()
             self._notify()
 
@@ -1034,6 +1054,8 @@ class PlantManager(DeltaManager):
     PARTS = ("self", "export")
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        # vor super().__init__ setzen: `config` und `_sensor_map` (vom Basis-
+        # Konstruktor aufgerufen) lesen Geräte und Speicher aus dem Eintrag
         self.entry = entry
         cfg = self.config
         self.devices: list[dict] = list(cfg.get(CONF_DEVICES, []))
@@ -1067,8 +1089,15 @@ class PlantManager(DeltaManager):
 
     @property
     def investment(self) -> float | None:
-        values = [self.device_investment(k) for k in self.prod_keys + self.sto_keys]
-        known = [v for v in values if v is not None]
+        known = []
+        for key in self.prod_keys + self.sto_keys:
+            value = self.device_investment(key)
+            if value is not None:
+                known.append(value)
+            elif self._spec(key).get(CONF_INVESTMENT_ENTITY):
+                # Kosten-Entität ist gesetzt, aber noch nie lesbar: keine
+                # Teilsumme melden, sie würde den Fortschritt zu hoch ausweisen.
+                return None
         return sum(known) if known else None
 
     def _sensor_map(self) -> dict[str, list[str]]:
