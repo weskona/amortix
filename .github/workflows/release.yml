@@ -1,12 +1,23 @@
 name: Release
 
 on:
+  # Release im GitHub-UI veröffentlichen ...
   release:
     types:
       - published
+  # ... oder einen Tag "vX.Y.Z" pushen (legt das Release automatisch an)
+  push:
+    tags:
+      - "v*"
 
 permissions:
   contents: write
+
+# Ein neues Release erzeugt je nach Weg ein Release- und ein Tag-Event;
+# pro Tag nur ein Lauf gleichzeitig.
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -20,7 +31,7 @@ jobs:
 
       - name: Set version from tag
         run: |
-          version="${{ github.event.release.tag_name }}"
+          version="${{ github.ref_name }}"
           version="${version#v}"
           echo "version=$version" >> "$GITHUB_ENV"
           jq --arg version "$version" '.version = $version' \
@@ -74,5 +85,7 @@ jobs:
       - name: Upload ZIP to release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
           files: custom_components/amortix/amortix.zip
+          generate_release_notes: ${{ steps.notes.outputs.found != 'true' }}
           body_path: ${{ steps.notes.outputs.found == 'true' && 'release_notes.md' || '' }}
