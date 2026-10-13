@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **System** mode: per-device starting values were booked twice when the automatic starting credit was still pending across a Home Assistant restart.
+- The current state is now written immediately when an entry is unloaded or reloaded (e.g. after changing options), instead of waiting for the delayed save.
+
 ## [1.4.0] - 2026-10-13
 
 ### Added

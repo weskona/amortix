@@ -316,3 +316,15 @@ def test_investment_is_never_converted():
     states = {**RATES, "input_number.inv": 1000}
     m = make(DirectManager, DIRECT_CFG, states, units={"input_number.inv": "ct"})
     assert m.investment == pytest.approx(1000)
+
+
+def test_flush_writes_current_state_immediately():
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    m = make(DirectManager, DIRECT_CFG, RATES)
+    m.total_savings = 12.5
+    m.store.async_save = AsyncMock()
+    asyncio.run(m.async_flush())
+    m.store.async_save.assert_awaited_once()
+    assert m.store.async_save.await_args.args[0]["total_savings"] == 12.5

@@ -303,7 +303,9 @@ class BaseManager(MetricsMixin):
         for entity_id, counter in counters.items():
             self._seed(entity_id, counter)
 
-        if not first_run:
+        # Steht die Startgutschrift noch aus, bucht sie die Startwerte selbst;
+        # ein Nachbuchen der Differenz würde sie doppelt zählen.
+        if not first_run and not self.initial_pending:
             self._after_restore()
 
         if first_run:
@@ -377,6 +379,10 @@ class BaseManager(MetricsMixin):
         if self._unsub_timer:
             self._unsub_timer()
             self._unsub_timer = None
+
+    async def async_flush(self) -> None:
+        """Aktuellen Stand sofort schreiben (z. B. vor einem Reload des Eintrags)."""
+        await self.store.async_save(self._data_to_save())
 
     # ------------------------------------------------------------------
     def add_listener(self, cb: CALLBACK_TYPE) -> CALLBACK_TYPE:
