@@ -151,7 +151,7 @@ Amortix doesn't estimate — it evaluates your configured sensors every 60 secon
 
 ### Limitations
 
-- **Storage: charging from the grid isn't priced.** The storage calculation assumes the battery is charged from your own PV surplus: charged energy only costs the feed-in tariff you would have received. If you also charge from the grid (dynamic tariff, night rate), the cost of that electricity is **not** deducted and the savings are overstated.
+- **Storage: charging from the grid isn't priced.** The storage calculation assumes the battery is charged from your own PV surplus: charged energy only costs the feed-in tariff you would have received. If you also charge from the grid (dynamic tariff, night rate), the cost of that electricity is **not** deducted and the savings are overstated. Use the **PV with storage** mode in that case, which handles grid charging.
 - **Projection is linear.** *Savings per day*, *Remaining time* and *Payback date* extrapolate the average since setup. With PV the yield is strongly seasonal, so a start in winter or summer skews the estimate; it becomes more reliable after a full year.
 - **Negative prices.** If the price entity goes negative (dynamic tariffs), self-consumed energy is valued negatively as well.
 - **PV with storage: battery feeding the grid.** If the battery exports to the grid, that energy is part of the export and valued at the feed-in tariff instead of the grid price.

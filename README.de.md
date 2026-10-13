@@ -151,7 +151,7 @@ Amortix schätzt nicht — es wertet alle 60 Sekunden die konfigurierten Sensore
 
 ### Grenzen
 
-- **Speicher: Netzladung wird nicht bepreist.** Die Speicher-Rechnung geht davon aus, dass der Akku aus eigenem PV-Überschuss geladen wird: Geladene Energie „kostet" nur die entgangene Einspeisevergütung. Wird zusätzlich aus dem Netz geladen (dynamischer Tarif, Nachtstrom), werden die Kosten dieses Stroms **nicht** abgezogen und die Ersparnis fällt zu hoch aus.
+- **Speicher: Netzladung wird nicht bepreist.** Die Speicher-Rechnung geht davon aus, dass der Akku aus eigenem PV-Überschuss geladen wird: Geladene Energie „kostet" nur die entgangene Einspeisevergütung. Wird zusätzlich aus dem Netz geladen (dynamischer Tarif, Nachtstrom), werden die Kosten dieses Stroms **nicht** abgezogen und die Ersparnis fällt zu hoch aus. Dafür den Modus **PV mit Speicher** verwenden, der Netzladung berücksichtigt.
 - **Prognose ist linear.** *Ersparnis pro Tag*, *Restzeit* und *Datum* extrapolieren den Durchschnitt seit der Einrichtung. Bei PV ist der Ertrag stark saisonal, ein Start im Winter oder Sommer verzerrt die Schätzung; nach einem vollen Jahr wird sie belastbarer.
 - **Negative Preise.** Wird die Preis-Entität negativ (dynamische Tarife), wird Eigenverbrauch ebenfalls negativ bewertet.
 - **PV mit Speicher: Batterie speist ins Netz.** Exportiert die Batterie ins Netz, zählt das zur Einspeisung und wird mit der Vergütung statt dem Strompreis bewertet.
