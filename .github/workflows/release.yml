@@ -9,6 +9,14 @@ on:
   push:
     tags:
       - "v*"
+  # ... oder manuell starten (Actions -> Release -> Run workflow): legt Tag
+  # und Release für den angegebenen Tag auf dem aktuellen main an
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag, z. B. v1.1.0"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -16,13 +24,15 @@ permissions:
 # Ein neues Release erzeugt je nach Weg ein Release- und ein Tag-Event;
 # pro Tag nur ein Lauf gleichzeitig.
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   release:
     name: Build and attach release ZIP
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,7 +41,7 @@ jobs:
 
       - name: Set version from tag
         run: |
-          version="${{ github.ref_name }}"
+          version="${TAG}"
           version="${version#v}"
           echo "version=$version" >> "$GITHUB_ENV"
           jq --arg version "$version" '.version = $version' \
@@ -85,7 +95,8 @@ jobs:
       - name: Upload ZIP to release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.event_name == 'workflow_dispatch' && 'main' || '' }}
           files: custom_components/amortix/amortix.zip
           generate_release_notes: ${{ steps.notes.outputs.found != 'true' }}
           body_path: ${{ steps.notes.outputs.found == 'true' && 'release_notes.md' || '' }}
