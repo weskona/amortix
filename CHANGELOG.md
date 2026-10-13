@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-13
+
 ### Changed
 - Energy sensors chosen during setup must report kWh. Sensors with another unit (Wh, MWh, …) are rejected with a clear message, because they would be off by a factor of 1000. The entity picker still lists only `device_class: energy` sensors.
 
@@ -81,7 +83,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Investment, price and feed-in tariff adjustable afterwards via **Configure**.
 - English and German translations.
 
-[Unreleased]: https://github.com/weskona/amortix/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/weskona/amortix/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/weskona/amortix/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/weskona/amortix/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/weskona/amortix/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/weskona/amortix/compare/v1.0.2...v1.1.0
