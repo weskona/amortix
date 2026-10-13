@@ -107,11 +107,19 @@ Requirements for all sensors:
 
 Amortix doesn't estimate — it evaluates your configured sensors every 60 seconds and only credits progress when the underlying meters have genuinely moved forward.
 
-- **Monotonic accounting.** Each cumulative sensor is tracked as an ever-increasing running total, independent of what the raw sensor itself does. A genuine meter reset (firmware update, device swap — reading drops to near zero) is recognized and continues counting from there instead of losing history. A brief single-sample glitch (e.g. a temporary `0` instead of `unavailable`) is told apart from a real reset by requiring two consecutive low readings, so a recovering sensor doesn't get credited twice.
+- **Monotonic accounting.** Each cumulative sensor is tracked as an ever-increasing running total, independent of what the raw sensor itself does. A genuine meter reset (firmware update, device swap — reading drops below half of the last value) is recognized and continues counting from there instead of losing history. A reset is only confirmed after two consecutive low readings, so a brief glitch (e.g. a temporary `0` instead of `unavailable`) isn't mistaken for one. If a glitch lasts long enough to be confirmed as a reset but the meter then jumps back to its old level within a few updates, the wrong booking is rolled back, so the history is never counted twice. Smaller dips (rounding, minor corrections) are ignored.
 - **Savings only move forward.** Each 60-second evaluation adds newly produced/self-consumed/discharged energy at the currently valid price — nothing is ever recomputed from scratch, so changing the price entity later doesn't retroactively rewrite past savings.
-- **Starting credit.** For a system that was already running before Amortix was set up, a one-time starting credit is computed once at setup — either from manually entered historical kWh figures, or automatically from the sensors' current readings — and added to the running total. It's never recalculated afterward, and the sensor/price entities can still be changed later via **Configure** without disturbing it.
-- **Progress can't go negative.** In storage mode, a stretch of charging without discharging while a feed-in tariff applies can temporarily reduce total savings below the starting credit. The amortization progress sensor is floored at 0 % regardless.
+- **Starting credit.** For a system that was already running before Amortix was set up, a one-time starting credit is computed once at setup — either from manually entered historical kWh figures, or automatically from the sensors' current readings — and added to the running total. If a sensor, the price or the feed-in entity is unavailable during the first start, the credit is not silently set to 0: it is held back (`initial_pending`, logged as a warning) and computed as soon as everything is readable, based on the meter values at that first reading. It's never recalculated afterward, and the sensor/price entities can still be changed later via **Configure** without disturbing it.
+- **Progress can't go negative.** In storage mode, a stretch of charging without discharging while a feed-in tariff applies can temporarily reduce total savings below the starting credit. The amortization progress sensor is floored at 0 % regardless. For the same reason the storage starting credit can be negative (e.g. a lot of charging, little discharging so far); it always equals the sum of its breakdown attributes.
 
+
+### Limitations
+
+- **Storage: charging from the grid isn't priced.** The storage calculation assumes the battery is charged from your own PV surplus: charged energy only costs the feed-in tariff you would have received. If you also charge from the grid (dynamic tariff, night rate), the cost of that electricity is **not** deducted and the savings are overstated.
+- **Projection is linear.** *Savings per day*, *Remaining time* and *Payback date* extrapolate the average since setup. With PV the yield is strongly seasonal, so a start in winter or summer skews the estimate; it becomes more reliable after a full year.
+- **Negative prices.** If the price entity goes negative (dynamic tariffs), self-consumed energy is valued negatively as well.
+- **Meter resets.** A reset that only drops the reading by less than half (e.g. 12 → 8 kWh) is treated as a normal correction and not detected, since treating every moderate dip as a reset would risk counting energy twice.
+- **Sensor units.** Price entities must provide €/kWh (not ct/kWh), energy sensors kWh.
 ---
 
 ## Requirements
