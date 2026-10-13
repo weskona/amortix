@@ -220,7 +220,8 @@
       }
     },
     "error": {
-      "same_sensor": "Every sensor may only be chosen once (e.g. export must not be among the production sensors)."
+      "same_sensor": "Every sensor may only be chosen once (e.g. export must not be among the production sensors).",
+      "not_kwh": "The sensor {entity} does not report kWh. Please choose an energy sensor with the unit kWh (convert Wh/MWh sensors to kWh first, e.g. with a template or utility meter)."
     },
     "abort": {
       "overview_exists": "There is already an overview."

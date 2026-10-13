@@ -49,6 +49,7 @@ from .const import (
     MODE_PLANT,
     MODE_WALLBOX,
 )
+from .units import non_kwh_entity
 
 ENERGY_SENSOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="sensor", device_class="energy")
@@ -70,6 +71,22 @@ KWH = selector.NumberSelector(
 EURO_KWH = selector.NumberSelector(
     selector.NumberSelectorConfig(min=0, step=0.001, unit_of_measurement="€/kWh", mode=selector.NumberSelectorMode.BOX)
 )
+
+
+# Alle Energie-Sensoren der Einrichtung; müssen kWh liefern (siehe units.py).
+_ENERGY_KEYS = (
+    CONF_PRODUCTION_SENSOR,
+    CONF_TO_GRID_SENSOR,
+    CONF_CHARGE_SENSOR,
+    CONF_DISCHARGE_SENSOR,
+    CONF_ENERGY_SENSOR,
+    CONF_HEAT_SENSOR,
+    CONF_ELECTRIC_SENSOR,
+)
+
+
+def _non_kwh_entity(hass, user_input: dict[str, Any]) -> str | None:
+    return non_kwh_entity(hass, user_input, _ENERGY_KEYS)
 
 
 def _economics_schema(d: dict[str, Any]) -> dict:
@@ -157,7 +174,11 @@ class AmortizationConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
-        if user_input is not None:
+        placeholders: dict[str, str] = {}
+        if user_input is not None and (bad := _non_kwh_entity(self.hass, user_input)):
+            errors["base"] = "not_kwh"
+            placeholders["entity"] = bad
+        elif user_input is not None:
             production = user_input[CONF_PRODUCTION_SENSOR]
             if user_input[CONF_TO_GRID_SENSOR] in production:
                 errors["base"] = "same_sensor"
@@ -177,13 +198,22 @@ class AmortizationConfigFlow(ConfigFlow, domain=DOMAIN):
                 **_startup_rates_and_flat(),
             }
         )
-        return self.async_show_form(step_id="direct", data_schema=schema, errors=errors)
+        return self.async_show_form(
+            step_id="direct",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders=placeholders,
+        )
 
     async def async_step_storage(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
-        if user_input is not None:
+        placeholders: dict[str, str] = {}
+        if user_input is not None and (bad := _non_kwh_entity(self.hass, user_input)):
+            errors["base"] = "not_kwh"
+            placeholders["entity"] = bad
+        elif user_input is not None:
             if user_input[CONF_CHARGE_SENSOR] == user_input[CONF_DISCHARGE_SENSOR]:
                 errors["base"] = "same_sensor"
             else:
@@ -203,7 +233,12 @@ class AmortizationConfigFlow(ConfigFlow, domain=DOMAIN):
                 **_startup_rates_and_flat(),
             }
         )
-        return self.async_show_form(step_id="storage", data_schema=schema, errors=errors)
+        return self.async_show_form(
+            step_id="storage",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders=placeholders,
+        )
 
     # ------------------------------------------------------------------
     # Anlage (plant): beliebig viele Erzeuger und Speicher, Kosten je Gerät
@@ -219,7 +254,11 @@ class AmortizationConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
-        if user_input is not None:
+        placeholders: dict[str, str] = {}
+        if user_input is not None and (bad := _non_kwh_entity(self.hass, user_input)):
+            errors["base"] = "not_kwh"
+            placeholders["entity"] = bad
+        elif user_input is not None:
             if user_input[CONF_TO_GRID_SENSOR] in user_input[CONF_PRODUCTION_SENSOR]:
                 errors["base"] = "same_sensor"
             else:
@@ -242,7 +281,12 @@ class AmortizationConfigFlow(ConfigFlow, domain=DOMAIN):
                 **_startup_flat_only(),
             }
         )
-        return self.async_show_form(step_id="plant", data_schema=schema, errors=errors)
+        return self.async_show_form(
+            step_id="plant",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders=placeholders,
+        )
 
     async def async_step_plant_device(
         self, user_input: dict[str, Any] | None = None
@@ -287,7 +331,11 @@ class AmortizationConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
-        if user_input is not None:
+        placeholders: dict[str, str] = {}
+        if user_input is not None and (bad := _non_kwh_entity(self.hass, user_input)):
+            errors["base"] = "not_kwh"
+            placeholders["entity"] = bad
+        elif user_input is not None:
             used = {
                 self._system[CONF_TO_GRID_SENSOR],
                 *self._system[CONF_PRODUCTION_SENSOR],
@@ -317,7 +365,12 @@ class AmortizationConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_INITIAL_SAVINGS, default=0): EURO,
             }
         )
-        return self.async_show_form(step_id="plant_storage", data_schema=schema, errors=errors)
+        return self.async_show_form(
+            step_id="plant_storage",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders=placeholders,
+        )
 
     async def async_step_plant_finish(
         self, user_input: dict[str, Any] | None = None
@@ -342,7 +395,12 @@ class AmortizationConfigFlow(ConfigFlow, domain=DOMAIN):
     async def _async_step_generic(
         self, mode: str, default_name: str, user_input: dict[str, Any] | None
     ) -> ConfigFlowResult:
-        if user_input is not None:
+        errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
+        if user_input is not None and (bad := _non_kwh_entity(self.hass, user_input)):
+            errors["base"] = "not_kwh"
+            placeholders["entity"] = bad
+        elif user_input is not None:
             user_input[CONF_MODE] = mode
             return self.async_create_entry(title=user_input[CONF_NAME], data=user_input)
         schema = vol.Schema(
@@ -353,7 +411,12 @@ class AmortizationConfigFlow(ConfigFlow, domain=DOMAIN):
                 **_startup_flat_only(),
             }
         )
-        return self.async_show_form(step_id=mode, data_schema=schema)
+        return self.async_show_form(
+            step_id=mode,
+            data_schema=schema,
+            errors=errors,
+            description_placeholders=placeholders,
+        )
 
     async def async_step_wallbox(
         self, user_input: dict[str, Any] | None = None
@@ -369,7 +432,11 @@ class AmortizationConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
-        if user_input is not None:
+        placeholders: dict[str, str] = {}
+        if user_input is not None and (bad := _non_kwh_entity(self.hass, user_input)):
+            errors["base"] = "not_kwh"
+            placeholders["entity"] = bad
+        elif user_input is not None:
             if user_input[CONF_HEAT_SENSOR] == user_input[CONF_ELECTRIC_SENSOR]:
                 errors["base"] = "same_sensor"
             else:
@@ -385,7 +452,12 @@ class AmortizationConfigFlow(ConfigFlow, domain=DOMAIN):
                 **_startup_flat_only(),
             }
         )
-        return self.async_show_form(step_id="heatpump", data_schema=schema, errors=errors)
+        return self.async_show_form(
+            step_id="heatpump",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders=placeholders,
+        )
 
     @staticmethod
     @callback

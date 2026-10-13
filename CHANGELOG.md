@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Energy sensors chosen during setup must report kWh. Sensors with another unit (Wh, MWh, …) are rejected with a clear message, because they would be off by a factor of 1000. The entity picker still lists only `device_class: energy` sensors.
+
 ## [1.3.0] - 2026-10-13
 
 ### Added

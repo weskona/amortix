@@ -92,6 +92,7 @@ Die **Gesamtübersicht** einmal anlegen, um **alle anderen Amortix-Einträge** z
 Anforderungen an alle Sensoren:
 - **Kumulierende kWh-Zähler** (`state_class: total`/`total_increasing`), keine Watt-Sensoren.
 - Müssen **`device_class: energy`** gesetzt haben — der Entitäts-Picker listet nur Sensoren mit dieser Device-Class, ein Template-/Utility-Meter-Sensor ohne diese taucht erst nach Ergänzen auf.
+- Müssen **kWh** liefern. Die Einrichtung lehnt Sensoren mit anderer Einheit (Wh, MWh, …) ab, weil sie um den Faktor 1000 falsch rechnen würden; vorher umrechnen (Template oder Utility-Meter).
 - Einspeisung/Ladung/Entladung als tatsächliches Zähler-Register — kein vorzeichenbehafteter/Saldo-Wert, keine Phasenwerte.
 
 **Anschaffungskosten, Strompreis und Einspeisevergütung lassen sich später ändern**, ohne die Historie zu verlieren: **Einstellungen → Geräte & Dienste → Amortix → Konfigurieren**. Die Erzeugungs-/Einspeisungs-/Lade-/Entlade-Sensoren und die Startgutschrift sind bei der Einrichtung fix und danach nicht mehr editierbar (sie legen die Rechnungsgrundlage fest).

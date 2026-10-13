@@ -220,7 +220,8 @@
       }
     },
     "error": {
-      "same_sensor": "Jeder Sensor darf nur einmal gewählt werden (z. B. darf die Einspeisung nicht zu den Erzeugungssensoren gehören)."
+      "same_sensor": "Jeder Sensor darf nur einmal gewählt werden (z. B. darf die Einspeisung nicht zu den Erzeugungssensoren gehören).",
+      "not_kwh": "Der Sensor {entity} liefert nicht kWh. Bitte einen Energie-Sensor mit der Einheit kWh wählen (Wh/MWh-Sensoren vorher per Template oder Utility-Meter in kWh umrechnen)."
     },
     "abort": {
       "overview_exists": "Es gibt bereits eine Gesamtübersicht."

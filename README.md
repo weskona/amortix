@@ -92,6 +92,7 @@ Add the **Overview** once to combine **all other Amortix entries**: *Einsparung 
 Requirements for all sensors:
 - **Cumulative kWh meters** (`state_class: total`/`total_increasing`), not watt sensors.
 - Must have **`device_class: energy`** set — the entity picker only lists sensors with that device class, so a template/utility_meter sensor without it won't show up until you add it.
+- Must report **kWh**. Setup rejects sensors with another unit (Wh, MWh, …) because they would be off by a factor of 1000; convert them first (template or utility meter).
 - Export/charge/discharge as the actual meter register — not a signed/net value, not per-phase.
 
 **Investment cost, grid price, and feed-in tariff can be changed later** without losing history: **Settings → Devices & Services → Amortix → Configure**. The production/export/charge/discharge sensors and the starting credit are fixed at setup and not editable afterward (they define the accounting baseline).
