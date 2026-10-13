@@ -1,5 +1,7 @@
 name: Release
 
+run-name: Release ${{ inputs.tag || github.ref_name }}
+
 on:
   # Release im GitHub-UI veröffentlichen ...
   release:
