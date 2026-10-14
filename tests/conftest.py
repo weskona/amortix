@@ -33,6 +33,10 @@ if "homeassistant" not in sys.modules:
             return name
 
     _module("homeassistant.components")
+    _module("homeassistant.components.persistent_notification", async_create=MagicMock())
+    sys.modules["homeassistant.components"].persistent_notification = sys.modules[
+        "homeassistant.components.persistent_notification"
+    ]
     _module(
         "homeassistant.components.sensor",
         SensorDeviceClass=_Attr(),
@@ -57,5 +61,6 @@ if "homeassistant" not in sys.modules:
         "homeassistant.util.dt",
         utcnow=lambda: datetime.now(timezone.utc),
         parse_datetime=datetime.fromisoformat,
+        utc_from_timestamp=lambda ts: datetime.fromtimestamp(ts, timezone.utc),
     )
     sys.modules["homeassistant.util"].dt = sys.modules["homeassistant.util.dt"]
