@@ -22,6 +22,7 @@ A **device-agnostic amortization tracker for Home Assistant**. From cumulative k
 - **Multiple production sources** — select several production sensors at once (e.g. balcony + roof PV); they're summed automatically.
 - **Starting credit** — an already-running system can start with its accumulated savings applied, either entered manually or computed automatically from current meter readings.
 - **Meter-reset safe** — a cumulative counter that genuinely resets (firmware update, device swap) is recognized and keeps counting forward without losing history; a single-sample glitch (e.g. a brief `0` instead of `unavailable`) is told apart from a real reset and doesn't get double-counted.
+- **Jump-protected.** A meter can only rise as much as 100 kW over the elapsed time would deliver; a larger jump (reload, calibration, cloud glitch) is never booked as energy. If the reading falls back it was a glitch; if the new level holds for three readings the counter is rebased without booking. Diagnostics: attributes `spruenge_verworfen`, `spruenge_neu_aufgesetzt`, `letzter_sprung`; a confirmed shift also raises a persistent notification. Prices outside 0–5 EUR/kWh are ignored.
 - **Roundtrip efficiency** (storage mode) — computed from your charge/discharge totals, or an existing efficiency sensor can be used instead.
 - **Adjustable later** — investment cost, grid price, and feed-in tariff entities can be changed anytime via **Configure**, without losing accumulated history.
 

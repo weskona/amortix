@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import logging
+import math
+import time
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, State, callback
+from homeassistant.components import persistent_notification
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import (
     async_track_state_change_event,
@@ -55,6 +58,22 @@ RESET_DROP_RATIO = 0.5
 # So viele Updates nach einer Reset-Bestätigung wird ein Sprung zurück auf den
 # alten Stand noch als Glitch erkannt und die Buchung zurückgenommen.
 RESET_GUARD_UPDATES = 3
+# Plausibilitaetsgrenze fuer Spruenge nach OBEN: Ein Zaehler kann pro Zeitspanne
+# nur so viel kWh zulegen, wie eine Anlage mit MAX_POWER_KW liefern wuerde
+# (Reload von Template/Utility-Meter, Kalibrierung, Zaehlertausch, Cloud-Glitch
+# springen sonst um tausende kWh und werden als Ersparnis gebucht).
+MAX_POWER_KW = 100.0
+# Mindest-Spielraum in kWh, damit Rundung/Burst-Meldungen nie als Sprung gelten.
+JUMP_MIN_ALLOWANCE_KWH = 5.0
+# Nach einem Neustart ist der Zeitpunkt der letzten Messung unbekannt: so viele
+# Stunden Ausfall werden beim ersten Update toleriert (nachgeholte Energie).
+RESTORE_GRACE_HOURS = 24.0
+# So viele aufeinanderfolgende Messwerte auf dem neuen Niveau bestaetigen einen
+# Niveausprung (Kalibrierung/Zaehlertausch). Er wird NICHT gebucht, sondern der
+# Zaehler wird auf das neue Niveau gesetzt (Rebase).
+JUMP_CONFIRM_UPDATES = 3
+# Preise/Verguetungen ausserhalb 0..MAX_RATE_EUR_KWH gelten als Sensor-Unsinn.
+MAX_RATE_EUR_KWH = 5.0
 
 
 def _progress_pct(savings: float, investment: float) -> float:
@@ -102,10 +121,29 @@ class MonotonicCounter:
         # gebuchte kWh, Rest-Updates). Springt der Zähler dann zurück auf den
         # alten Stand, wird die irrtümliche Buchung zurückgenommen.
         self._guard: tuple[float, float, int] | None = None
+        # Zeitpunkt des letzten akzeptierten Werts (None = unbekannt, z. B. nach
+        # Neustart) und ein noch unbestaetigter Sprung nach oben.
+        self._last_ts: float | None = None
+        self._jump: tuple[float, int] | None = None
+        self.jumps_rejected: int = 0
+        self.jumps_rebased: int = 0
+        self.last_jump: dict | None = None
+        # Entity-ID fuer Log-Meldungen (wird vom Manager beim ersten Event gesetzt)
+        self.name: str = ""
 
     def restore(self, raw_last: float | None, total: float) -> None:
         self.raw_last = raw_last
         self.total = total
+        self._last_ts = None
+        self._jump = None
+
+    def _allowance(self, now: float) -> float:
+        """Maximal plausibler kWh-Zuwachs seit dem letzten akzeptierten Wert."""
+        if self._last_ts is None:
+            hours = RESTORE_GRACE_HOURS
+        else:
+            hours = max(now - self._last_ts, 0.0) / 3600.0
+        return max(MAX_POWER_KW * hours, JUMP_MIN_ALLOWANCE_KWH)
 
     @property
     def initial(self) -> float:
@@ -114,10 +152,16 @@ class MonotonicCounter:
             return 0.0
         return max(self.raw_last - self.total, 0.0)
 
-    def update(self, reading: float) -> None:
+    def update(self, reading: float, now: float | None = None) -> None:
+        now = time.time() if now is None else now
         if self.raw_last is None:
             self.raw_last = reading
+            self._last_ts = now
             return
+
+        if reading > self.raw_last and self._guard is None and not self._plausible_rise(reading, now):
+            return
+        self._last_ts = now
 
         if self._guard is not None:
             old_raw, added, ttl = self._guard
@@ -149,6 +193,46 @@ class MonotonicCounter:
         self._reset_candidate = None
         self.total += reading - self.raw_last
         self.raw_last = reading
+
+    def _plausible_rise(self, reading: float, now: float) -> bool:
+        """Prueft einen Anstieg; unplausible Spruenge werden nicht gebucht.
+
+        True = normal weiterverarbeiten. False = Wert zurueckgehalten
+        (update() kehrt dann ohne Buchung zurueck).
+        """
+        allowance = self._allowance(now)
+        if reading - self.raw_last <= allowance:
+            self._jump = None
+            return True
+        # Unplausibler Sprung: nie buchen. Haelt das neue Niveau, ist es eine
+        # Kalibrierung/ein Zaehlertausch -> Rebase ohne Buchung.
+        if self._jump is not None and abs(reading - self._jump[0]) <= JUMP_MIN_ALLOWANCE_KWH:
+            count = self._jump[1] + 1
+            if count >= JUMP_CONFIRM_UPDATES:
+                _LOGGER.warning(
+                    "%s: Zaehlersprung %.2f -> %.2f kWh bestaetigt; nicht als Energie gebucht "
+                    "(Zaehler auf neues Niveau gesetzt)",
+                    self.name, self.raw_last, reading,
+                )
+                self.jumps_rebased += 1
+                self.last_jump = {"from": self.raw_last, "to": reading, "action": "rebase", "ts": now}
+                self.raw_last = reading
+                self._last_ts = now
+                self._jump = None
+                self._reset_candidate = None
+            else:
+                self._jump = (reading, count)
+            return False
+        if self._jump is None:
+            _LOGGER.warning(
+                "%s: Unplausibler Zaehlersprung %.2f -> %.2f kWh (max. %.1f kWh erlaubt) "
+                "ignoriert, wartet auf Bestaetigung",
+                self.name, self.raw_last, reading, allowance,
+            )
+            self.jumps_rejected += 1
+            self.last_jump = {"from": self.raw_last, "to": reading, "action": "rejected", "ts": now}
+        self._jump = (reading, 1)
+        return False
 
 
 class MetricsMixin:
@@ -254,8 +338,16 @@ class BaseManager(MetricsMixin):
                 value = float(state.state)
             except (ValueError, TypeError):
                 return None
+            if not math.isfinite(value):
+                return None
             if rate and _is_cent_unit(state.attributes.get("unit_of_measurement")):
                 value /= 100.0
+            if rate and not 0.0 <= value <= MAX_RATE_EUR_KWH:
+                _LOGGER.warning(
+                    "%s: Preis %.4f EUR/kWh unplausibel (erlaubt 0..%.1f), letzter gueltiger Wert bleibt",
+                    entity_id, value, MAX_RATE_EUR_KWH,
+                )
+                return None
             return value
         return None
 
@@ -269,7 +361,8 @@ class BaseManager(MetricsMixin):
 
     def _current_price(self) -> float | None:
         value = self._read_entity(self.config.get(CONF_PRICE_ENTITY), rate=True)
-        if value is not None:
+        # 0 als Bezugspreis ist ein Glitch, sobald schon ein gueltiger Preis bekannt ist
+        if value is not None and not (value == 0.0 and self.last_price):
             self.last_price = value
             return value
         return self.last_price
@@ -385,6 +478,42 @@ class BaseManager(MetricsMixin):
             self._unsub_timer()
             self._unsub_timer = None
 
+    @callback
+    def _notify_rebase(self, entity_id: str, jump: dict) -> None:
+        """Meldet einen bestaetigten Niveausprung (nicht gebucht) dauerhaft in der UI."""
+        persistent_notification.async_create(
+            self.hass,
+            (
+                f"Der Zaehler `{entity_id}` ist von {jump['from']:.2f} auf {jump['to']:.2f} kWh "
+                "gesprungen und blieb auf dem neuen Niveau. Amortix hat den Sprung nicht als "
+                "Energie/Ersparnis gebucht und zaehlt ab dem neuen Stand weiter."
+            ),
+            title=f"Amortix: Zaehlersprung bei {entity_id}",
+            notification_id=f"{DOMAIN}_jump_{entity_id}",
+        )
+
+    def jump_attributes(self) -> dict:
+        """Diagnose des Sprung-Schutzes (seit dem letzten HA-Start)."""
+        counters = self._counters()
+        rejected = sum(c.jumps_rejected for c in counters.values())
+        rebased = sum(c.jumps_rebased for c in counters.values())
+        attrs: dict = {"spruenge_verworfen": rejected, "spruenge_neu_aufgesetzt": rebased}
+        latest = max(
+            ((eid, c.last_jump) for eid, c in counters.items() if c.last_jump),
+            key=lambda item: item[1]["ts"],
+            default=None,
+        )
+        if latest:
+            eid, jump = latest
+            attrs["letzter_sprung"] = {
+                "sensor": eid,
+                "von_kwh": round(jump["from"], 3),
+                "nach_kwh": round(jump["to"], 3),
+                "aktion": jump["action"],
+                "zeit": dt_util.utc_from_timestamp(jump["ts"]).isoformat(),
+            }
+        return attrs
+
     async def async_flush(self) -> None:
         """Aktuellen Stand sofort schreiben (z. B. vor einem Reload des Eintrags)."""
         await self.store.async_save(self._data_to_save())
@@ -413,9 +542,14 @@ class BaseManager(MetricsMixin):
             reading = float(new_state.state)
         except (ValueError, TypeError):
             return
-        counter = self._counters().get(event.data.get("entity_id"))
+        entity_id = event.data.get("entity_id")
+        counter = self._counters().get(entity_id)
         if counter is not None:
+            counter.name = entity_id
+            rebased = counter.jumps_rebased
             counter.update(reading)
+            if counter.jumps_rebased != rebased and counter.last_jump:
+                self._notify_rebase(entity_id, counter.last_jump)
 
     # ------------------------------------------------------------------
     @callback
@@ -898,6 +1032,7 @@ class DeltaManager(BaseManager):
         }
         for key, value in self.credit_breakdown.items():
             attrs[f"startgutschrift_{key}"] = value
+        attrs.update(self.jump_attributes())
         return attrs
 
 

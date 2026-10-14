@@ -237,6 +237,7 @@ class DirectSavingsSensor(_BaseSensor):
         }
         for key, value in m.credit_breakdown.items():
             attrs[f"startgutschrift_{key}"] = value
+        attrs.update(m.jump_attributes())
         return attrs
 
 
@@ -308,6 +309,7 @@ class StorageSavingsSensor(_BaseSensor):
         }
         for key, value in m.credit_breakdown.items():
             attrs[f"startgutschrift_{key}"] = value
+        attrs.update(m.jump_attributes())
         return attrs
 
 

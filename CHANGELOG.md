@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-14
+
+### Added
+- **Jump protection for upward meter jumps.** A cumulative meter can only rise as much as 100 kW over the elapsed time would deliver (at least 5 kWh; after a restart up to 24 hours of catch-up are tolerated). Anything above is not booked as energy/savings, e.g. a counter that suddenly jumps by thousands of kWh after a template/utility-meter reload, a calibration or a cloud glitch. If the reading falls back it was a glitch and counting simply continues; if the new level holds for three readings (calibration, meter swap) the counter is rebased to the new level without booking the jump.
+- Diagnostics on the *Einsparung gesamt* sensors: attributes `spruenge_verworfen`, `spruenge_neu_aufgesetzt` and `letzter_sprung` (sensor, from/to kWh, action, time; counted since the last Home Assistant start). A confirmed level shift additionally creates a persistent notification; every warning in the log names the affected entity.
+- **Price protection:** prices and feed-in tariffs outside 0 to 5 EUR/kWh (or `nan`/`inf`) are ignored and the last valid value is kept; a price of exactly 0 counts as a glitch once a valid price is known.
+
 ### Changed
 - **Direct use** mode values production and feed-in as separate meters (like the other modes), so the result no longer depends on which sensor updates first; with dynamic tariffs a briefly lagging feed-in sensor no longer books too much self-consumption. The total formula is unchanged and existing entries migrate automatically.
 - **System** mode reports no investment (and no progress) while a configured cost entity has never been readable, instead of a too-low partial sum.
