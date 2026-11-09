@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-11-09
+
+### Fixed
+- **Plant mode: wrong split of a negative producer pool.** When a storage charged (or energy was exported) in an evaluation in which only one producer's meter had updated, the whole negative pool was booked to that producer alone, e.g. a small balcony plug-in system. Its savings stayed near zero and the payback forecast showed decades. A negative pool is now split by the producers' total meter share instead of the share of that single evaluation. The plant total is unchanged; already booked per-device values are not corrected retroactively.
+
 ## [1.5.0] - 2026-10-14
 
 ### Added

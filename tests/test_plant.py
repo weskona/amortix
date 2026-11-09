@@ -140,6 +140,24 @@ def test_export_arriving_before_production_nets_out():
     assert m.total_savings == pytest.approx(ref.total_savings)
 
 
+def test_negative_pool_is_shared_by_total_production_not_by_this_minutes_delta():
+    # Speicher lädt 10 kWh, nur BKW 1 meldet 0,1 kWh: Pool negativ. Der Fehlbetrag
+    # darf nicht allein beim BKW landen, das zufällig zuerst gemeldet hat.
+    states = {**STATES, "sensor.pv": 0, "sensor.bkw1": 0, "sensor.bkw2": 0}
+    m = make(PlantManager, PLANT_CFG, states)
+    put(m, "prod0", 16000)
+    put(m, "prod1", 2000)
+    put(m, "prod2", 400)
+    m.credited.update(prod0=16000, prod1=2000, prod2=400)
+    put(m, "prod1", 2000.1)
+    put(m, "chg0", 10)
+    m._async_evaluate()
+    loss = (0.1 - 10) * 0.30 + 10 * 0.08
+    assert m.dev_savings["prod1"] == pytest.approx(loss * 2000.1 / 18400.1)
+    assert m.dev_savings["prod0"] < m.dev_savings["prod1"] < 0
+    assert sum(m.dev_savings.values()) == pytest.approx(m.total_savings)
+
+
 # ---------------------------------------------------------------- Startwerte
 def test_per_device_starting_values_for_a_running_system():
     cfg = {

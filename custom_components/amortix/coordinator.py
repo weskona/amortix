@@ -1257,7 +1257,12 @@ class PlantManager(DeltaManager):
         sum_c, sum_d = sum(d_chg.values()), sum(d_dis.values())
 
         pool = (sum_p - d_exp - sum_c) * price + (d_exp + sum_c) * feed
-        if sum_p > 0:
+        # Ein negativer Pool (Speicher lädt oder es wird eingespeist, ohne dass die
+        # Erzeugung in derselben Auswertung schon gemeldet wurde) darf nicht nach dem
+        # Zufallsanteil dieser Minute verteilt werden: meldet nur ein kleines BKW,
+        # trüge es sonst den ganzen Fehlbetrag allein. Er wird nach den
+        # Gesamtanteilen der Zähler verteilt (wie bei sum_p == 0).
+        if sum_p > 0 and pool >= 0:
             shares = {k: d_prod[k] / sum_p for k in self.prod_keys}
         else:
             totals = {k: self.kwh(k) for k in self.prod_keys}
