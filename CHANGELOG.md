@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Amortix sidebar panel** (Home Assistant sidebar → *Amortix*): totals, progress bars, remaining amount and payback forecast for every entry, with per-device breakdown for System entries. Live updates via a websocket subscription (`amortix/subscribe`, one-shot `amortix/summary`); German/English; no build step. Requires the `frontend`, `http`, `panel_custom` and `websocket_api` integrations (part of every standard Home Assistant install).
+- **Amortix sidebar panel** (Home Assistant sidebar → *Amortix*, dark card style inspired by glow-dashboard): totals, progress bars, remaining amount and payback forecast for every entry, with per-device breakdown for System entries. Live updates via a websocket subscription (`amortix/subscribe`, one-shot `amortix/summary`); German/English; no build step. Requires the `frontend`, `http`, `panel_custom` and `websocket_api` integrations (part of every standard Home Assistant install).
 
 ### Fixed
 - Jump protection: a pending (unconfirmed) upward jump is now discarded when the reading returns to the old level, so two unrelated glitches can no longer add up to a "confirmed" level shift and silently rebase the counter.

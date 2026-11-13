@@ -16,6 +16,9 @@ const I18N = {
     since: "seit",
     unknown: "–",
     paid: "Amortisiert",
+    timeLeft: "Restzeit",
+    total: "Gesamt",
+    entries: "Einträge",
     modes: {
       plant: "Anlage", direct: "Direktverbrauch", storage: "Speicher", combined: "PV + Speicher",
       wallbox: "Wallbox", generic: "Allgemein", heatpump: "Wärmepumpe",
@@ -38,6 +41,9 @@ const I18N = {
     since: "since",
     unknown: "–",
     paid: "Paid back",
+    timeLeft: "Time left",
+    total: "Total",
+    entries: "entries",
     modes: {
       plant: "System", direct: "Direct use", storage: "Storage", combined: "PV + storage",
       wallbox: "Wallbox", generic: "General", heatpump: "Heat pump",
@@ -47,35 +53,62 @@ const I18N = {
 };
 
 const STYLE = `
-  :host { display: block; background: var(--primary-background-color); color: var(--primary-text-color);
-          min-height: 100%; font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
-  header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--app-header-background-color, var(--primary-color));
-           color: var(--app-header-text-color, #fff); position: sticky; top: 0; z-index: 2; }
-  header h1 { font-size: 20px; font-weight: 400; margin: 0; flex: 1; }
-  header button { background: none; border: 0; color: inherit; cursor: pointer; font-size: 24px; line-height: 1; display: none; }
+  :host { display: block; min-height: 100%; container-type: inline-size;
+    --bg:#0b0d12; --line:rgba(255,255,255,.065); --tile:rgba(255,255,255,.032); --tileb:rgba(255,255,255,.07);
+    --text:#f3f5f9; --muted:#8b91a1; --dim:#5d6373;
+    --gold:#f7b733; --cyan:#38bdf8; --green:#34d399; --orange:#fb923c; --violet:#a78bfa;
+    background: var(--bg); color: var(--text);
+    font-family: 'Outfit','Plus Jakarta Sans','Segoe UI',system-ui,sans-serif; -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 22px 0; }
+  header h1 { font-size: 15px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  header button { display: none; width: 40px; height: 40px; border-radius: 14px; background: rgba(255,255,255,.05);
+    border: 1px solid var(--line); color: var(--text); font-size: 20px; cursor: pointer; }
   :host([narrow]) header button { display: block; }
-  main { max-width: 1100px; margin: 0 auto; padding: 16px; box-sizing: border-box; }
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
-  .tile, .card { background: var(--card-background-color, #fff); border-radius: var(--ha-card-border-radius, 12px);
-                 box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,.2)); }
-  .tile { padding: 14px 16px; }
-  .tile .label { font-size: 12px; color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: .04em; }
-  .tile .value { font-size: 22px; font-weight: 500; margin-top: 4px; font-variant-numeric: tabular-nums; }
-  .card { padding: 16px; margin-bottom: 16px; }
-  .card h2 { font-size: 17px; font-weight: 500; margin: 0; }
-  .sub { color: var(--secondary-text-color); font-size: 13px; margin-top: 2px; }
-  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-  .bar { height: 10px; border-radius: 5px; background: var(--divider-color, #ddd); overflow: hidden; margin: 12px 0 6px; }
-  .bar > div { height: 100%; background: var(--primary-color); border-radius: 5px; transition: width .6s ease; }
-  .bar.done > div { background: var(--success-color, #43a047); }
-  .meta { display: flex; flex-wrap: wrap; gap: 4px 20px; font-size: 14px; font-variant-numeric: tabular-nums; }
-  .meta span b { font-weight: 500; }
-  .devices { margin-top: 14px; border-top: 1px solid var(--divider-color, #ddd); padding-top: 10px; }
-  .devices h3 { font-size: 12px; font-weight: 500; text-transform: uppercase; color: var(--secondary-text-color); margin: 0 0 6px; letter-spacing: .04em; }
-  .device { padding: 8px 0; }
-  .device + .device { border-top: 1px dashed var(--divider-color, #ddd); }
-  .device .bar { height: 6px; margin: 6px 0 4px; }
-  .msg { text-align: center; color: var(--secondary-text-color); padding: 48px 16px; }
+  .wrap { padding: 14px 22px 28px; max-width: 1400px; margin: 0 auto; }
+  .panel { background: linear-gradient(180deg,#161920,#12151b); border: 1px solid var(--line); border-radius: 30px;
+    padding: 20px 22px; position: relative; overflow: hidden; }
+  .hd { display: flex; align-items: center; gap: 12px; min-height: 40px; margin-bottom: 14px; }
+  .ttl { font-size: 15px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .lbl { margin-left: auto; font-size: 15px; color: rgba(243,245,249,.78); white-space: nowrap; }
+  .lbl.ok { color: var(--green); font-weight: 600; }
+  .sub { color: var(--dim); font-size: 13px; margin: -8px 0 14px; }
+  .hero { display: grid; grid-template-columns: 170px 1fr; gap: 22px; align-items: center; margin-bottom: 20px; }
+  .ring { position: relative; width: 170px; height: 170px; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring .track { stroke: rgba(255,255,255,.07); }
+  .ring .arc { stroke: url(#g); transition: stroke-dashoffset .8s ease; }
+  .ring .c { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .ring .c b { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .ring .c span { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .stats { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+  .stat { display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; border-radius: 15px;
+    background: var(--tile); border: 1px solid var(--tileb); min-width: 0; }
+  .stat span { font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat b { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .stat.gold b { color: var(--gold); } .stat.green b { color: var(--green); } .stat.cyan b { color: var(--cyan); }
+  .bar { height: 10px; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,.07); margin: 0 0 14px; }
+  .bar i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--cyan), var(--green));
+    transition: width .8s ease; }
+  .bar.done i { background: var(--green); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px; }
+  .devices { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .dev { border-radius: 16px; background: var(--tile); border: 1px solid var(--tileb); padding: 10px 14px; }
+  .dev .top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+  .dev .top b { font-weight: 600; font-size: 15px; }
+  .dev .top small { color: var(--dim); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+  .dev .top em { margin-left: auto; font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .dev .bar { height: 6px; margin-bottom: 8px; }
+  .dev .stats { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .dev .stat { padding: 6px 9px; border-radius: 12px; } .dev .stat b { font-size: 14px; }
+  .dev .stat span { font-size: 10.5px; }
+  .msg { text-align: center; color: var(--dim); padding: 64px 16px; font-size: 15px; }
+  @container (max-width: 720px) {
+    .wrap { padding: 12px 12px 24px; } .grid { grid-template-columns: 1fr; }
+    .hero { grid-template-columns: 1fr; justify-items: center; } .hero .stats { width: 100%; }
+    .stat b { font-size: 16.5px; } .dev .stats { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  }
 `;
 
 class AmortixPanel extends HTMLElement {
@@ -166,46 +199,66 @@ class AmortixPanel extends HTMLElement {
   _paybackText(m) {
     if (m.remaining === 0 && m.investment) return this._t.paid;
     if (!m.payback_date) return this._t.unknown;
-    const days = m.remaining_days !== null && m.remaining_days !== undefined
-      ? ` (${new Intl.NumberFormat(this._lang).format(m.remaining_days)} ${this._t.days})` : "";
-    return `${this._date(m.payback_date)}${days}`;
+    return this._date(m.payback_date);
+  }
+
+  _daysText(m) {
+    if (m.remaining_days === null || m.remaining_days === undefined || !m.payback_date) return "";
+    return `${new Intl.NumberFormat(this._lang).format(m.remaining_days)} ${this._t.days}`;
   }
 
   _bar(m) {
     const pct = Math.max(0, Math.min(m.progress ?? 0, 100));
     const done = m.progress !== null && m.progress >= 100;
-    return `<div class="bar ${done ? "done" : ""}"><div style="width:${pct}%"></div></div>`;
+    return `<div class="bar ${done ? "done" : ""}"><i style="width:${pct}%"></i></div>`;
   }
 
-  _meta(m) {
+  _stat(label, value, cls = "") {
+    return `<div class="stat ${cls}"><span>${label}</span><b>${value}</b></div>`;
+  }
+
+  _stats(m, devices = false) {
     const t = this._t;
-    return `<div class="meta">
-      <span>${t.savings}: <b>${this._money(m.savings)}</b></span>
-      <span>${t.invest}: <b>${this._money(m.investment)}</b></span>
-      <span>${t.remaining}: <b>${this._money(m.remaining)}</b></span>
-      <span>${t.perDay}: <b>${this._money(m.daily_average)}</b></span>
-      <span>${t.payback}: <b>${this._paybackText(m)}</b></span>
-    </div>`;
+    const items = [
+      this._stat(t.savings, this._money(m.savings), "gold"),
+      this._stat(t.invest, this._money(m.investment)),
+      this._stat(t.remaining, this._money(m.remaining)),
+      this._stat(t.perDay, this._money(m.daily_average), "green"),
+      this._stat(t.payback, this._paybackText(m), "cyan"),
+    ];
+    if (!devices) items.push(this._stat(t.timeLeft, this._daysText(m) || t.unknown));
+    return `<div class="stats">${items.join("")}</div>`;
+  }
+
+  _ring(pct) {
+    const r = 74, c = 2 * Math.PI * r;
+    const v = Math.max(0, Math.min(pct ?? 0, 100));
+    return `<div class="ring"><svg viewBox="0 0 170 170">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#34d399"/></linearGradient></defs>
+      <circle class="track" cx="85" cy="85" r="${r}" fill="none" stroke-width="12"/>
+      <circle class="arc" cx="85" cy="85" r="${r}" fill="none" stroke-width="12" stroke-linecap="round"
+        stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - v / 100)}"/></svg>
+      <div class="c"><b>${this._pct(pct)}</b><span>${this._t.progress}</span></div></div>`;
   }
 
   _entryCard(e) {
     const t = this._t;
     const mode = t.modes[e.mode] || e.mode;
+    const done = e.progress !== null && e.progress >= 100;
     const devices = (e.devices || []).map((d) => `
-      <div class="device">
-        <div class="row"><span>${this._esc(d.name)} <span class="sub">· ${t.kinds[d.kind] || d.kind}</span></span>
-          <b>${this._pct(d.progress)}</b></div>
+      <div class="dev">
+        <div class="top"><b>${this._esc(d.name)}</b><small>${t.kinds[d.kind] || d.kind}</small><em>${this._pct(d.progress)}</em></div>
         ${this._bar(d)}
-        ${this._meta(d)}
+        ${this._stats(d, true)}
       </div>`).join("");
-    return `<div class="card">
-      <div class="row"><div><h2>${this._esc(e.title)}</h2>
-        <div class="sub">${this._esc(mode)}${e.start_time ? ` · ${t.since} ${this._date(e.start_time)}` : ""}</div></div>
-        <b>${this._pct(e.progress)}</b></div>
+    return `<section class="panel">
+      <div class="hd"><span class="ttl">${this._esc(e.title)}</span>
+        <span class="lbl ${done ? "ok" : ""}">${this._pct(e.progress)}</span></div>
+      <div class="sub">${this._esc(mode)}${e.start_time ? ` · ${t.since} ${this._date(e.start_time)}` : ""}</div>
       ${this._bar(e)}
-      ${this._meta(e)}
-      ${devices ? `<div class="devices"><h3>${t.devices}</h3>${devices}</div>` : ""}
-    </div>`;
+      ${this._stats(e)}
+      ${devices ? `<div class="devices">${devices}</div>` : ""}
+    </section>`;
   }
 
   _render() {
@@ -220,21 +273,16 @@ class AmortixPanel extends HTMLElement {
       body = `<div class="msg">${t.empty}</div>`;
     } else {
       const tot = this._data.total;
-      body = `
-        <div class="tiles">
-          <div class="tile"><div class="label">${t.savings}</div><div class="value">${this._money(tot.savings)}</div></div>
-          <div class="tile"><div class="label">${t.invest}</div><div class="value">${this._money(tot.investment)}</div></div>
-          <div class="tile"><div class="label">${t.remaining}</div><div class="value">${this._money(tot.remaining)}</div></div>
-          <div class="tile"><div class="label">${t.progress}</div><div class="value">${this._pct(tot.progress)}</div></div>
-          <div class="tile"><div class="label">${t.perDay}</div><div class="value">${this._money(tot.daily_average)}</div></div>
-          <div class="tile"><div class="label">${t.payback}</div><div class="value">${tot.remaining === 0 && tot.investment ? t.paid : this._date(tot.payback_date)}</div></div>
-        </div>
-        ${this._bar(tot)}
-        ${this._data.entries.map((e) => this._entryCard(e)).join("")}`;
+      body = `<section class="panel" style="margin-bottom:20px">
+          <div class="hd"><span class="ttl">${t.total}</span>
+            <span class="lbl">${this._data.entries.length} ${t.entries}</span></div>
+          <div class="hero">${this._ring(tot.progress)}${this._stats(tot)}</div>
+        </section>
+        <div class="grid">${this._data.entries.map((e) => this._entryCard(e)).join("")}</div>`;
     }
     this.shadowRoot.innerHTML = `<style>${STYLE}</style>
       <header><button id="menu" aria-label="Menu">☰</button><h1>${t.title}</h1></header>
-      <main>${body}</main>`;
+      <div class="wrap">${body}</div>`;
     this.shadowRoot.getElementById("menu").addEventListener("click", () =>
       this.dispatchEvent(new CustomEvent("hass-toggle-menu", { bubbles: true, composed: true }))
     );
