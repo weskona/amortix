@@ -41,7 +41,8 @@ jobs:
         with:
           # Beta-/RC-Tags (z. B. v1.6.0-beta.1) werden aus dem getaggten Commit
           # gebaut, alle anderen aus main.
-          ref: ${{ contains(inputs.tag || github.ref_name, '-') && (inputs.tag || github.ref_name) || 'main' }}
+          # Manuell gestartet: der Commit des gewaehlten Branches (Tag existiert noch nicht).
+          ref: ${{ contains(inputs.tag || github.ref_name, '-') && (github.event_name == 'workflow_dispatch' && github.sha || inputs.tag || github.ref_name) || 'main' }}
 
       - name: Set version from tag
         run: |
@@ -101,7 +102,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
-          target_commitish: ${{ github.event_name == 'workflow_dispatch' && 'main' || '' }}
+          target_commitish: ${{ github.event_name == 'workflow_dispatch' && (contains(env.TAG, '-') && github.sha || 'main') || '' }}
           prerelease: ${{ contains(env.TAG, '-') }}
           files: custom_components/amortix/amortix.zip
           generate_release_notes: ${{ steps.notes.outputs.found != 'true' }}
