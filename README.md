@@ -24,6 +24,7 @@ A **device-agnostic amortization tracker for Home Assistant**. From cumulative k
 - **Meter-reset safe** — a cumulative counter that genuinely resets (firmware update, device swap) is recognized and keeps counting forward without losing history; a single-sample glitch (e.g. a brief `0` instead of `unavailable`) is told apart from a real reset and doesn't get double-counted.
 - **Jump-protected.** A meter can only rise as much as 100 kW over the elapsed time would deliver; a larger jump (reload, calibration, cloud glitch) is never booked as energy. If the reading falls back it was a glitch; if the new level holds for three readings the counter is rebased without booking. Diagnostics: attributes `spruenge_verworfen`, `spruenge_neu_aufgesetzt`, `letzter_sprung`; a confirmed shift also raises a persistent notification. Prices outside 0–5 EUR/kWh are ignored.
 - **Roundtrip efficiency** (storage mode) — computed from your charge/discharge totals, or an existing efficiency sensor can be used instead.
+- **Sidebar panel** — an *Amortix* entry in the Home Assistant sidebar shows totals, progress bars, remaining amount and payback forecast for all entries, including per-device breakdown for System entries.
 - **Adjustable later** — investment cost, grid price, and feed-in tariff entities can be changed anytime via **Configure**, without losing accumulated history.
 
 ---

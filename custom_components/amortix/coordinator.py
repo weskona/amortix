@@ -161,6 +161,10 @@ class MonotonicCounter:
 
         if reading > self.raw_last and self._guard is None and not self._plausible_rise(reading, now):
             return
+        if reading <= self.raw_last:
+            # Rueckkehr auf/unter das alte Niveau: ein offener Sprung war ein Glitch
+            # und darf spaeter nicht mit einem anderen Sprung "bestaetigt" werden.
+            self._jump = None
         self._last_ts = now
 
         if self._guard is not None:

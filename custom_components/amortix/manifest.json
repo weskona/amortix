@@ -5,6 +5,12 @@
     "@weskona"
   ],
   "config_flow": true,
+  "dependencies": [
+    "frontend",
+    "http",
+    "panel_custom",
+    "websocket_api"
+  ],
   "documentation": "https://github.com/weskona/amortix",
   "integration_type": "device",
   "iot_class": "calculated",

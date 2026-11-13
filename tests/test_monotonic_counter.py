@@ -243,3 +243,16 @@ def test_rebase_creates_a_persistent_notification_once_per_sensor():
     args, kwargs = create.call_args
     assert kwargs["notification_id"] == "amortix_jump_sensor.x"
     assert "sensor.x" in args[1] and "nicht als" in args[1]
+
+
+def test_non_consecutive_jumps_do_not_confirm_a_rebase():
+    c = MonotonicCounter()
+    c.update(100.0)
+    c.update(5000.0)   # Sprung 1
+    c.update(100.0)    # zurueck auf altes Niveau (Zaehler steht still)
+    c.update(5000.0)   # Sprung 2 (nicht aufeinanderfolgend)
+    c.update(100.0)
+    c.update(5000.0)   # Sprung 3
+    assert c.jumps_rebased == 0
+    assert c.total == pytest.approx(0.0)
+    assert c.raw_last == 100.0
