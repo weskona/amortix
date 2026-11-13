@@ -39,7 +39,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: main
+          # Beta-/RC-Tags (z. B. v1.6.0-beta.1) werden aus dem getaggten Commit
+          # gebaut, alle anderen aus main.
+          ref: ${{ contains(inputs.tag || github.ref_name, '-') && (inputs.tag || github.ref_name) || 'main' }}
 
       - name: Set version from tag
         run: |
@@ -52,6 +54,7 @@ jobs:
           echo "manifest version set to $version"
 
       - name: Commit version bump back to main
+        if: ${{ !contains(env.TAG, '-') }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -99,6 +102,7 @@ jobs:
         with:
           tag_name: ${{ env.TAG }}
           target_commitish: ${{ github.event_name == 'workflow_dispatch' && 'main' || '' }}
+          prerelease: ${{ contains(env.TAG, '-') }}
           files: custom_components/amortix/amortix.zip
           generate_release_notes: ${{ steps.notes.outputs.found != 'true' }}
           body_path: ${{ steps.notes.outputs.found == 'true' && 'release_notes.md' || '' }}
