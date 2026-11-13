@@ -56,3 +56,11 @@ def test_panel_js_exists_and_registers_component():
     js = (PKG / "frontend" / "amortix-panel.js").read_text()
     assert 'customElements.define("amortix-panel"' in js
     assert "amortix/subscribe" in js
+
+
+def test_font_ships_with_license_and_is_served():
+    fe = PKG / "frontend"
+    assert (fe / "outfit.woff2").read_bytes()[:4] == b"wOF2"
+    assert "SIL OPEN FONT LICENSE" in (fe / "OFL-Outfit.txt").read_text().upper()
+    assert "outfit.woff2" in (PKG / "panel.py").read_text()
+    assert "/amortix_panel/outfit.woff2" in (fe / "amortix-panel.js").read_text()

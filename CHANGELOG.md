@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.6.0-beta.1] - 2026-11-13
 
 ### Added
+- Panel font **Outfit** (variable woff2, 32 KB, SIL OFL 1.1, license included in `frontend/OFL-Outfit.txt`) is served by the integration itself; no external requests.
 - **Amortix sidebar panel** (Home Assistant sidebar → *Amortix*, dark card style inspired by glow-dashboard): totals, progress bars, remaining amount and payback forecast for every entry, with per-device breakdown for System entries. Live updates via a websocket subscription (`amortix/subscribe`, one-shot `amortix/summary`); German/English; no build step. Requires the `frontend`, `http`, `panel_custom` and `websocket_api` integrations (part of every standard Home Assistant install).
 
 ### Fixed

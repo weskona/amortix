@@ -14,7 +14,9 @@ from .summary import build_summary
 PANEL_URL_PATH = "amortix"
 PANEL_COMPONENT = "amortix-panel"
 STATIC_URL = "/amortix_panel"
-PANEL_FILE = Path(__file__).parent / "frontend" / "amortix-panel.js"
+FRONTEND_DIR = Path(__file__).parent / "frontend"
+PANEL_FILE = FRONTEND_DIR / "amortix-panel.js"
+FONT_FILE = FRONTEND_DIR / "outfit.woff2"
 REFRESH_SECONDS = 60
 _FLAG = f"{DOMAIN}_panel_assets"      # Websocket + statische Datei (einmalig je Laufzeit)
 _PANEL_FLAG = f"{DOMAIN}_panel_active"  # Sidebar-Eintrag (kommt und geht mit den Eintraegen)
@@ -47,10 +49,14 @@ async def async_register_panel(hass) -> None:
             from homeassistant.components.http import StaticPathConfig
 
             await hass.http.async_register_static_paths(
-                [StaticPathConfig(url, str(PANEL_FILE), False)]
+                [
+                    StaticPathConfig(url, str(PANEL_FILE), False),
+                    StaticPathConfig(f"{STATIC_URL}/outfit.woff2", str(FONT_FILE), True),
+                ]
             )
         except ImportError:  # aeltere Home-Assistant-Versionen
             hass.http.register_static_path(url, str(PANEL_FILE), False)
+            hass.http.register_static_path(f"{STATIC_URL}/outfit.woff2", str(FONT_FILE), True)
     hass.data[_PANEL_FLAG] = True
 
     version = (await _manifest_version(hass)) or "0"

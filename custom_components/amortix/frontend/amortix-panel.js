@@ -111,6 +111,15 @@ const STYLE = `
   }
 `;
 
+// @font-face wirkt nicht im Shadow DOM, daher einmalig im Seitenkopf (Outfit, SIL OFL 1.1)
+if (!document.getElementById("amortix-font")) {
+  const font = document.createElement("style");
+  font.id = "amortix-font";
+  font.textContent = `@font-face{font-family:"Outfit";font-style:normal;font-display:swap;font-weight:100 900;` +
+    `src:url(/amortix_panel/outfit.woff2) format("woff2")}`;
+  document.head.appendChild(font);
+}
+
 class AmortixPanel extends HTMLElement {
   constructor() {
     super();
